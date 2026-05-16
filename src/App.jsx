@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
@@ -8,6 +9,12 @@ const YEAR = 2026;
 const BIRTHDATE = new Date(2008, 9, 17);
 const LIFE_YEARS = 70;
 const PALETTE = ["#818cf8","#f59e0b","#ef4444","#10b981","#3b82f6","#a78bfa","#ec4899","#14b8a6","#f97316","#84cc16","#06b6d4","#e879f9"];
+
+// ─── User context для изоляции данных по юзеру ───────────────────────────────
+import { createContext, useContext } from "react";
+const UserCtx = createContext("");
+const useUserId = () => useContext(UserCtx);
+const userKey = (uid, k) => `ht-${uid}-${k}`;
 
 const DEFAULT_HABITS = [
   { id:1, name:"Лечь до 23:30",            icon:"🛏️", yearGoal:365, color:"#818cf8" },
@@ -83,7 +90,7 @@ function AnimatedSection({ animKey, direction, children }) {
     : "";
 
   return (
-    <div className={enterClass} style={{ willChange: "opacity, transform", ...exitStyle }}>
+    <div className={enterClass} style={{ willChange: phase !== "idle" ? "opacity, transform" : "auto", ...exitStyle }}>
       {displayChildren}
     </div>
   );
@@ -93,13 +100,13 @@ function AnimatedSection({ animKey, direction, children }) {
 function ProgressBar({pct,color,height=8}){
   return(
     <div style={{display:"flex",alignItems:"center",gap:8}}>
-      <span style={{fontSize:11,color:"#94a3b8",minWidth:32,textAlign:"right",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{pct}%</span>
+      <span style={{fontSize:11,color:"#94a3b8",minWidth:32,textAlign:"right",fontWeight:700,fontFamily:"'JetBrains Mono',monospace",animation:"countUp .4s cubic-bezier(.34,1.4,.64,1) both"}}>{pct}%</span>
       <div style={{flex:1,background:"rgba(255,255,255,0.04)",borderRadius:99,height,overflow:"hidden",border:"1px solid rgba(255,255,255,0.06)"}}>
-        <div style={{
+        <div className="progress-shimmer" style={{
           width:`${Math.min(pct,100)}%`,
           background:`linear-gradient(90deg,${color||"#818cf8"}88,${color||"#818cf8"})`,
           height:"100%",borderRadius:99,
-          transition:"width .7s cubic-bezier(.34,1.2,.64,1)",
+          transition:"width .8s cubic-bezier(.34,1.2,.64,1)",
           boxShadow:`0 0 10px ${color||"#818cf8"}55, 0 0 20px ${color||"#818cf8"}22`
         }}/>
       </div>
@@ -137,33 +144,45 @@ function MiniConfetti({color}){
 function CheckCell({checked,today,future,color,onToggle}){
   const [burst,setBurst]=useState(false);
   const [confetti,setConfetti]=useState(false);
+  const [hovered,setHovered]=useState(false);
   const handle=()=>{
     if(future)return;
     if(!checked){
       setBurst(true);
-      setTimeout(()=>setBurst(false),400);
-      if(Math.random()<.7){setConfetti(true);setTimeout(()=>setConfetti(false),750);}
+      setTimeout(()=>setBurst(false),500);
+      if(Math.random()<.75){setConfetti(true);setTimeout(()=>setConfetti(false),850);}
     }
     onToggle();
   };
   return(
     <div style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",margin:"0 auto"}}>
       {confetti&&<MiniConfetti color={color}/>}
+      {/* Glow ring on hover */}
+      {hovered&&!future&&!checked&&(
+        <div style={{
+          position:"absolute",inset:-4,borderRadius:12,
+          border:`1px solid ${color}55`,
+          animation:"glowRing .6s ease-out both",
+          pointerEvents:"none",
+        }}/>
+      )}
       <div onClick={handle}
+        onMouseEnter={()=>!future&&setHovered(true)}
+        onMouseLeave={()=>setHovered(false)}
         style={{
           width:26,height:26,
-          border:`2px solid ${checked?color:today?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.06)"}`,
+          border:`2px solid ${checked?color:hovered&&!future?`${color}99`:today?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.06)"}`,
           borderRadius:8,
           cursor:future?"default":"pointer",
-          background:checked?`linear-gradient(135deg,${color}cc,${color})`:"rgba(255,255,255,0.03)",
+          background:checked?`linear-gradient(135deg,${color}cc,${color})`:hovered&&!future?`${color}18`:"rgba(255,255,255,0.03)",
           display:"flex",alignItems:"center",justifyContent:"center",
-          transition:"all .25s cubic-bezier(.34,1.4,.64,1)",
-          opacity:future?.25:1,
-          transform:burst?"scale(1.45)":"scale(1)",
-          boxShadow:checked?`0 0 14px ${color}66, 0 0 28px ${color}22`:today?`0 0 0 2px ${color}44, inset 0 0 8px rgba(255,255,255,0.05)`:"none",
+          transition:"all .2s cubic-bezier(.34,1.4,.64,1)",
+          opacity:future?.22:1,
+          transform:burst?"scale(1.55) rotate(8deg)":hovered&&!future?"scale(1.12)":"scale(1)",
+          boxShadow:checked?`0 0 14px ${color}88, 0 0 30px ${color}33`:hovered&&!future?`0 0 10px ${color}44`:today?`0 0 0 2px ${color}44, inset 0 0 8px rgba(255,255,255,0.05)`:"none",
           backdropFilter:"blur(4px)",
         }}>
-        {checked&&<span style={{color:"#fff",fontSize:13,lineHeight:1,fontWeight:800,animation:"checkPop .35s cubic-bezier(.34,1.56,.64,1) both",textShadow:"0 1px 4px rgba(0,0,0,0.5)"}}>✓</span>}
+        {checked&&<span style={{color:"#fff",fontSize:13,lineHeight:1,fontWeight:800,animation:"checkPop .4s cubic-bezier(.34,1.56,.64,1) both",textShadow:"0 1px 4px rgba(0,0,0,0.5)"}}>✓</span>}
       </div>
     </div>
   );
@@ -173,13 +192,12 @@ function CheckCell({checked,today,future,color,onToggle}){
 function GlassCard({children, style={}, className="", glow=""}) {
   return (
     <div className={`glass-card ${className}`} style={{
-      background: "rgba(15,23,42,0.7)",
       backdropFilter: "blur(20px)",
-      border: "1px solid rgba(255,255,255,0.08)",
       borderRadius: 16,
       boxShadow: glow
-        ? `0 4px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 60px ${glow}22`
-        : "0 4px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.06)",
+        ? `0 4px 40px var(--shadow), 0 0 0 1px var(--card-border2), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 60px ${glow}22`
+        : `0 4px 40px var(--shadow), 0 0 0 1px var(--card-border2), inset 0 1px 0 rgba(255,255,255,0.06)`,
+      transition: "box-shadow .35s ease, transform .3s cubic-bezier(.34,1.2,.64,1), background .35s ease",
       ...style,
     }}>
       {children}
@@ -291,46 +309,71 @@ function HabitManager({habits,saveHabits,onClose}){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
-function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) { h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; }
-  return h.toString(36);
-}
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+// 1. Зайди на https://supabase.com и создай бесплатный проект
+// 2. Settings → API → вставь свои значения ниже
+import { createClient } from "@supabase/supabase-js";
 
+const SUPABASE_URL  = "https://hqyevjcnqedfywmhzpbj.supabase.co";   // https://xxxx.supabase.co
+const SUPABASE_ANON = "sb_publishable_4R03wUmx57ecHjIjuUQfuA_17XVG8uL";        // eyJh...
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
+// Email генерируется автоматически: nickname@tracker.app
+// Пользователь видит только никнейм + пароль
 function AuthScreen({ onLogin }) {
-  const [mode, setMode] = useState("login"); // login | register
-  const [login, setLogin] = useState("");
+  const [mode, setMode]       = useState("login"); // login | register
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showPw, setShowPw]   = useState(false);
+  const [error, setError]     = useState("");
   const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const toEmail = (nick) => `${nick.trim().toLowerCase().replace(/[^a-z0-9_]/gi, "_")}@tracker.app`;
 
   const inp = {
-    width: "100%", padding: "13px 16px", borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)",
-    color: "#e2e8f0", fontSize: 15, outline: "none", transition: "border-color .2s",
+    width:"100%", padding:"13px 16px", borderRadius:12,
+    border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)",
+    color:"#e2e8f0", fontSize:15, outline:"none", transition:"border-color .2s",
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError(""); setSuccess("");
-    const u = login.trim();
-    if (!u || !password) { setError("Заполни все поля"); return; }
-    if (u.length < 3) { setError("Логин минимум 3 символа"); return; }
-    if (password.length < 4) { setError("Пароль минимум 4 символа"); return; }
+    const u = username.trim();
+    if (!u) { setError("Введи никнейм"); return; }
+    if (u.length < 2) { setError("Никнейм минимум 2 символа"); return; }
+    if (!password) { setError("Введи пароль"); return; }
+    if (password.length < 6) { setError("Пароль минимум 6 символов"); return; }
+    if (mode === "register" && password !== confirmPw) { setError("Пароли не совпадают"); return; }
 
-    const users = JSON.parse(localStorage.getItem("ht-users") || "{}");
-
-    if (mode === "register") {
-      if (users[u]) { setError("Такой логин уже занят"); return; }
-      users[u] = hashStr(password);
-      localStorage.setItem("ht-users", JSON.stringify(users));
-      localStorage.setItem("ht-session", u);
-      setSuccess("Аккаунт создан! Входим...");
-      setTimeout(() => onLogin(u), 800);
-    } else {
-      if (!users[u] || users[u] !== hashStr(password)) { setError("Неверный логин или пароль"); return; }
-      localStorage.setItem("ht-session", u);
-      onLogin(u);
+    setLoading(true);
+    const fakeEmail = toEmail(u);
+    try {
+      if (mode === "register") {
+        const { data, error: e } = await supabase.auth.signUp({
+          email: fakeEmail, password,
+          options: { data: { username: u } },
+        });
+        if (e) throw e;
+        onLogin(data.user);
+      } else {
+        const { data, error: e } = await supabase.auth.signInWithPassword({
+          email: fakeEmail, password,
+        });
+        if (e) throw e;
+        onLogin(data.user);
+      }
+    } catch (e) {
+      const msg = e.message || "";
+      if (msg.includes("Invalid login credentials")) setError("Неверный никнейм или пароль");
+      else if (msg.includes("already registered") || msg.includes("User already registered")) setError("Этот никнейм уже занят");
+      else setError(msg || "Что-то пошло не так");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -349,26 +392,30 @@ function AuthScreen({ onLogin }) {
         @keyframes auroraFloat{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(20px,-15px) scale(1.04);}}
         @keyframes floatIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(24px) scale(0.97);}to{opacity:1;transform:none;}}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        @keyframes glowPulse{0%,100%{box-shadow:0 8px 32px rgba(129,140,248,0.5);}50%{box-shadow:0 8px 48px rgba(167,139,250,0.8);}}
+        @keyframes textShimmer{0%{background-position:200% center;}100%{background-position:-200% center;}}
       `}</style>
 
-      <div style={{ width:"100%", maxWidth:420, padding:24, position:"relative", zIndex:1, animation:"fadeUp .5s ease" }}>
+      <div style={{ width:"100%", maxWidth:420, padding:24, position:"relative", zIndex:1, animation:"fadeUp .55s cubic-bezier(.22,.68,0,1.15)" }}>
         {/* Logo */}
         <div style={{ textAlign:"center", marginBottom:36 }}>
-          <div style={{ width:64, height:64, borderRadius:20, background:"linear-gradient(135deg,#818cf8,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto 16px", boxShadow:"0 8px 32px rgba(129,140,248,0.5)" }}>🎯</div>
-          <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, fontSize:20, background:"linear-gradient(90deg,#c7d2fe,#a78bfa)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>ТРЕКЕР 2026</div>
-          <div style={{ fontSize:13, color:"#475569", marginTop:6 }}>Личный трекер задач и продуктивности</div>
+          <div style={{ width:64, height:64, borderRadius:20, background:"linear-gradient(135deg,#818cf8,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto 16px", boxShadow:"0 8px 32px rgba(129,140,248,0.5)", animation:"glowPulse 3s ease infinite" }}>🎯</div>
+          <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, fontSize:20, background:"linear-gradient(90deg,#c7d2fe,#a78bfa,#818cf8,#c7d2fe)", backgroundSize:"300% auto", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", animation:"textShimmer 4s linear infinite" }}>ТРЕКЕР 2026</div>
+          <div style={{ fontSize:13, color:"#475569", marginTop:6, animation:"fadeUp .5s .2s ease both" }}>Личный трекер задач и продуктивности</div>
         </div>
 
         {/* Card */}
-        <div style={{ background:"rgba(15,23,42,0.85)", backdropFilter:"blur(24px)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:20, padding:32, boxShadow:"0 8px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)" }}>
+        <div style={{ background:"rgba(15,23,42,0.85)", backdropFilter:"blur(24px)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:20, padding:32, boxShadow:"0 8px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)", animation:"fadeUp .55s .1s cubic-bezier(.22,.68,0,1.15) both" }}>
           {/* Tabs */}
           <div style={{ display:"flex", background:"rgba(255,255,255,0.04)", borderRadius:12, padding:4, marginBottom:28 }}>
             {[["login","Войти"],["register","Регистрация"]].map(([m,l])=>(
-              <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");}}
-                style={{ flex:1, padding:"9px", borderRadius:9, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, transition:"all .2s",
+              <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");setConfirmPw("");}}
+                style={{ flex:1, padding:"9px", borderRadius:9, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, transition:"all .25s cubic-bezier(.34,1.2,.64,1)",
                   background: mode===m ? "linear-gradient(135deg,#818cf8,#a78bfa)" : "transparent",
                   color: mode===m ? "white" : "#64748b",
                   boxShadow: mode===m ? "0 4px 16px rgba(129,140,248,0.4)" : "none",
+                  transform: mode===m ? "scale(1.02)" : "scale(1)",
                 }}>
                 {l}
               </button>
@@ -376,20 +423,42 @@ function AuthScreen({ onLogin }) {
           </div>
 
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            {/* Никнейм */}
             <div>
-              <div style={{ fontSize:11, color:"#64748b", marginBottom:7, fontWeight:600, letterSpacing:"0.08em" }}>ЛОГИН</div>
-              <input value={login} onChange={e=>setLogin(e.target.value)} onKeyDown={handleKey}
-                placeholder="твой_логин" style={inp}
+              <div style={{ fontSize:11, color:"#64748b", marginBottom:7, fontWeight:600, letterSpacing:"0.08em" }}>НИКНЕЙМ</div>
+              <input value={username} onChange={e=>setUsername(e.target.value)} onKeyDown={handleKey}
+                placeholder="твой_никнейм" style={inp}
                 onFocus={e=>e.target.style.borderColor="rgba(129,140,248,0.5)"}
                 onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"}/>
             </div>
+
+            {/* Пароль */}
             <div>
               <div style={{ fontSize:11, color:"#64748b", marginBottom:7, fontWeight:600, letterSpacing:"0.08em" }}>ПАРОЛЬ</div>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={handleKey}
-                placeholder="••••••••" style={inp}
-                onFocus={e=>e.target.style.borderColor="rgba(129,140,248,0.5)"}
-                onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"}/>
+              <div style={{ position:"relative" }}>
+                <input type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={handleKey}
+                  placeholder="••••••••" style={{...inp, paddingRight:46}}
+                  onFocus={e=>e.target.style.borderColor="rgba(129,140,248,0.5)"}
+                  onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"}/>
+                <button onClick={()=>setShowPw(v=>!v)} style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:16, lineHeight:1, padding:0 }}>
+                  {showPw?"🙈":"👁️"}
+                </button>
+              </div>
             </div>
+
+            {/* Повтор пароля — только при регистрации */}
+            {mode === "register" && (
+              <div>
+                <div style={{ fontSize:11, color:"#64748b", marginBottom:7, fontWeight:600, letterSpacing:"0.08em" }}>ПОВТОРИ ПАРОЛЬ</div>
+                <div style={{ position:"relative" }}>
+                  <input type={showPw?"text":"password"} value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} onKeyDown={handleKey}
+                    placeholder="••••••••" style={{...inp, paddingRight:46, borderColor: confirmPw && confirmPw!==password ? "rgba(239,68,68,0.5)" : confirmPw && confirmPw===password ? "rgba(16,185,129,0.5)" : undefined}}
+                    onFocus={e=>e.target.style.borderColor="rgba(129,140,248,0.5)"}
+                    onBlur={e=>e.target.style.borderColor=confirmPw&&confirmPw!==password?"rgba(239,68,68,0.5)":confirmPw&&confirmPw===password?"rgba(16,185,129,0.5)":"rgba(255,255,255,0.1)"}/>
+                  {confirmPw && <div style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", fontSize:15 }}>{confirmPw===password?"✅":"❌"}</div>}
+                </div>
+              </div>
+            )}
 
             {error && (
               <div style={{ padding:"10px 14px", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:10, fontSize:13, color:"#f87171", animation:"floatIn .2s ease" }}>
@@ -402,57 +471,103 @@ function AuthScreen({ onLogin }) {
               </div>
             )}
 
-            <button onClick={handleSubmit}
-              style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer", fontWeight:800, fontSize:15, marginTop:4, transition:"all .25s",
+            <button onClick={handleSubmit} disabled={loading}
+              className="btn-ripple"
+              style={{ padding:"14px", borderRadius:12, border:"none", cursor: loading ? "not-allowed" : "pointer", fontWeight:800, fontSize:15, marginTop:4, transition:"all .25s",
                 background:"linear-gradient(135deg,#6366f1,#818cf8,#a78bfa)",
+                backgroundSize:"200% auto",
                 color:"white", boxShadow:"0 6px 28px rgba(129,140,248,0.5)",
+                opacity: loading ? 0.7 : 1,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:10,
               }}
-              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+              onMouseEnter={e=>{ if(!loading) e.currentTarget.style.transform="translateY(-1px)"; }}
               onMouseLeave={e=>e.currentTarget.style.transform="none"}>
-              {mode === "login" ? "→ Войти" : "✦ Создать аккаунт"}
+              {loading
+                ? <><div style={{ width:17,height:17,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",animation:"spin .7s linear infinite" }}/> Загрузка...</>
+                : mode==="login" ? "→ Войти" : "✦ Создать аккаунт"
+              }
             </button>
           </div>
         </div>
 
         <div style={{ textAlign:"center", marginTop:20, fontSize:12, color:"#334155" }}>
-          Данные хранятся только на этом устройстве
+          Никнейм + пароль — больше ничего не нужно
         </div>
       </div>
     </div>
   );
 }
 
-export default function App(){
-  const [currentUser, setCurrentUser] = useState(() => {
-    try { return localStorage.getItem("ht-session") || null; } catch { return null; }
-  });
 
-  const handleLogin = (username) => setCurrentUser(username);
-  const handleLogout = () => {
-    localStorage.removeItem("ht-session");
-    setCurrentUser(null);
+export default function App() {
+  const [user, setUser]       = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Получить текущую сессию при загрузке
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Слушать изменения сессии (логин / логаут / обновление токена)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
   };
 
-  if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
+  if (loading) return (
+    <div style={{ minHeight:"100vh", background:"#060b18", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ textAlign:"center", animation:"fadeUp .4s ease" }}>
+        <div style={{
+          width:56, height:56, borderRadius:18,
+          background:"linear-gradient(135deg,#818cf8,#a78bfa)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:26, margin:"0 auto 20px",
+          boxShadow:"0 8px 32px rgba(129,140,248,0.5)",
+          animation:"glowPulse 2s ease infinite",
+        }}>🎯</div>
+        <div style={{ width:36, height:36, border:"3px solid rgba(129,140,248,0.15)", borderTopColor:"#818cf8", borderRadius:"50%", animation:"spin .7s linear infinite", margin:"0 auto 16px" }}/>
+        <div style={{ color:"#475569", fontSize:13 }}>Загрузка...</div>
+      </div>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg);}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+        @keyframes glowPulse{0%,100%{box-shadow:0 8px 32px rgba(129,140,248,0.5);}50%{box-shadow:0 8px 48px rgba(167,139,250,0.8);}}
+      `}</style>
+    </div>
+  );
 
-  return <AppInner currentUser={currentUser} onLogout={handleLogout} />;
+  if (!user) return <AuthScreen onLogin={setUser} />;
+
+  const displayName = user.user_metadata?.username || user.email?.split("@")[0] || "Пользователь";
+  return <AppInner currentUser={displayName} userId={user.id} onLogout={handleLogout} />;
 }
 
-function AppInner({ currentUser, onLogout }){
-  const [habits, setHabits] = useState(() => storageGet("ht-habits") || DEFAULT_HABITS);
-  const [completions, setCompletions] = useState(() => storageGet("ht-completions") || {});
-  const [monthGoals, setMonthGoals] = useState(() => storageGet("ht-monthgoals") || {});
-  const [finances, setFinances] = useState(() => storageGet("ht-finances") || []);
-  const [bigGoals, setBigGoals] = useState(() => storageGet("ht-biggoals") || []);
-  const [view, setView] = useState(() => storageGet("ht-view") || "year");
+function AppInner({ currentUser, userId, onLogout }){
+  const K = (k) => `ht-${userId}-${k}`;
+  const [habits, setHabits] = useState(() => storageGet(K("habits")) || DEFAULT_HABITS);
+  const [completions, setCompletions] = useState(() => storageGet(K("completions")) || {});
+  const [monthGoals, setMonthGoals] = useState(() => storageGet(K("monthgoals")) || {});
+  const [finances, setFinances] = useState(() => storageGet(K("finances")) || []);
+  const [bigGoals, setBigGoals] = useState(() => storageGet(K("biggoals")) || []);
+  const [view, setView] = useState(() => storageGet(K("view")) || "year");
+  const [theme, setTheme] = useState(() => localStorage.getItem(K("theme")) || "original");
   const [curMonth, setCurMonth] = useState(() => {
-    const saved = storageGet("ht-curmonth");
+    const saved = storageGet(K("curmonth"));
     return saved !== null ? saved : new Date().getMonth();
   });
   const [animDir, setAnimDir] = useState("fade");
   const prevViewRef = useRef(view);
   const prevMonthRef = useRef(curMonth);
-  const VIEW_ORDER = ["year", "life", "finance", "ai", "motivation", "pomodoro"];
+  const VIEW_ORDER = ["year", "life", "finance", "ai", "motivation", "pomodoro", "content", "board"];
 
   const navigateTo = useCallback((newView, newMonth) => {
     const oldView = prevViewRef.current;
@@ -470,20 +585,28 @@ function AppInner({ currentUser, onLogout }){
     }
     prevViewRef.current = newView;
     if (newMonth !== undefined) prevMonthRef.current = newMonth;
-    if (newView) { setView(newView); storageSet("ht-view", newView); }
-    if (newMonth !== undefined) { setCurMonth(newMonth); storageSet("ht-curmonth", newMonth); }
+    if (newView) { setView(newView); storageSet(K("view"), newView); }
+    if (newMonth !== undefined) { setCurMonth(newMonth); storageSet(K("curmonth"), newMonth); }
   }, []);
 
-  const saveHabits = useCallback(h => { setHabits(h); storageSet("ht-habits", h); }, []);
-  const saveCompletions = useCallback(c => { setCompletions(c); storageSet("ht-completions", c); }, []);
-  const saveGoals = useCallback(g => { setMonthGoals(g); storageSet("ht-monthgoals", g); }, []);
-  const saveFinances = useCallback(f => { setFinances(f); storageSet("ht-finances", f); }, []);
-  const saveBigGoals = useCallback(g => { setBigGoals(g); storageSet("ht-biggoals", g); }, []);
+  const saveHabits = useCallback(h => { setHabits(h); storageSet(K("habits"), h); }, []);
+  const saveCompletions = useCallback(c => { setCompletions(c); storageSet(K("completions"), c); }, []);
+  const saveGoals = useCallback(g => { setMonthGoals(g); storageSet(K("monthgoals"), g); }, []);
+  const saveFinances = useCallback(f => { setFinances(f); storageSet(K("finances"), f); }, []);
+  const saveBigGoals = useCallback(g => { setBigGoals(g); storageSet(K("biggoals"), g); }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => {
+      const next = t === "original" ? "mono" : "original";
+      localStorage.setItem(K("theme"), next);
+      return next;
+    });
+  }, []);
 
   const toggle = useCallback((ds, hid) => {
     setCompletions(prev => {
       const next = {...prev, [ds]: {...(prev[ds]||{}), [hid]: !prev[ds]?.[hid]}};
-      storageSet("ht-completions", next);
+      storageSet(K("completions"), next);
       return next;
     });
   }, []);
@@ -497,6 +620,123 @@ function AppInner({ currentUser, onLogout }){
   const yearCount = useCallback(hid => MONTHS.reduce((s,_,m) => s+monthCount(hid,m), 0), [monthCount]);
   const animKey = view === "month" ? `month-${curMonth}` : view;
 
+  // ── Pomodoro — глобальный стейт, живёт вне вкладки ──────────────────────────
+  const [pomoSettings, setPomoSettings] = useState(() => {
+    try { const v = localStorage.getItem("ht-pomo-settings"); return v ? JSON.parse(v) : { work:25, short:5, long:15, longAfter:4 }; } catch { return { work:25, short:5, long:15, longAfter:4 }; }
+  });
+  const [pomoMode,        setPomoMode]        = useState("work");
+  const [pomoTimeLeft,    setPomoTimeLeft]    = useState(() => {
+    try { const v = localStorage.getItem("ht-pomo-settings"); const s = v ? JSON.parse(v) : { work:25 }; return s.work * 60; } catch { return 25*60; }
+  });
+  const [pomoRunning,     setPomoRunning]     = useState(false);
+  const [pomoSession,     setPomoSession]     = useState(1);
+  const [pomoShowSettings,setPomoShowSettings]= useState(false);
+  const [pomoEditSettings,setPomoEditSettings]= useState({ ...pomoSettings });
+  const [pomoLog,         setPomoLog]         = useState(() => {
+    try { const v = localStorage.getItem("ht-pomo-log"); return v ? JSON.parse(v) : []; } catch { return []; }
+  });
+  const pomoIntervalRef  = useRef(null);
+  const pomoAudioCtxRef  = useRef(null);
+  const pomoModeRef      = useRef(pomoMode);
+  const pomoSessionRef   = useRef(pomoSession);
+  const pomoSettingsRef  = useRef(pomoSettings);
+  useEffect(() => { pomoModeRef.current     = pomoMode;     }, [pomoMode]);
+  useEffect(() => { pomoSessionRef.current  = pomoSession;  }, [pomoSession]);
+  useEffect(() => { pomoSettingsRef.current = pomoSettings; }, [pomoSettings]);
+
+  const POMO_MODES = {
+    work:  { label:"Работа",           color:"#818cf8", icon:"💼", dur: pomoSettings.work  },
+    short: { label:"Короткий перерыв", color:"#10b981", icon:"☕", dur: pomoSettings.short },
+    long:  { label:"Длинный перерыв",  color:"#f59e0b", icon:"🌿", dur: pomoSettings.long  },
+  };
+
+  const pomoPlayBeep = useCallback(() => {
+    try {
+      if (!pomoAudioCtxRef.current) pomoAudioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = pomoAudioCtxRef.current;
+      [{ delay:0, freq:880, dur:0.6 }, { delay:0.75, freq:880, dur:0.6 }, { delay:1.5, freq:1046, dur:1.0 }].forEach(({ delay, freq, dur }) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sine"; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + delay + 0.05);
+        gain.gain.setValueAtTime(0.5, ctx.currentTime + delay + dur - 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + dur);
+        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + dur);
+      });
+    } catch {}
+  }, []);
+
+  const pomoSwitchMode = useCallback((newMode, newSession) => {
+    const s = pomoSettingsRef.current;
+    setPomoMode(newMode);
+    setPomoTimeLeft((newMode === "work" ? s.work : newMode === "short" ? s.short : s.long) * 60);
+    setPomoRunning(false);
+    if (newSession !== undefined) setPomoSession(newSession);
+  }, []);
+
+  useEffect(() => {
+    if (pomoRunning) {
+      pomoIntervalRef.current = setInterval(() => {
+        setPomoTimeLeft(t => {
+          if (t <= 1) {
+            clearInterval(pomoIntervalRef.current);
+            pomoPlayBeep();
+            setPomoRunning(false);
+            const mode = pomoModeRef.current;
+            const session = pomoSessionRef.current;
+            const s = pomoSettingsRef.current;
+            if (mode === "work") {
+              const entry = { id:Date.now(), date:new Date().toISOString().slice(0,10), duration:s.work, ts:Date.now() };
+              setPomoLog(prev => { const next=[entry,...prev].slice(0,200); try{localStorage.setItem("ht-pomo-log",JSON.stringify(next));}catch{} return next; });
+              const nextSess = session + 1;
+              setPomoSession(nextSess);
+              if ((nextSess - 1) % s.longAfter === 0) pomoSwitchMode("long");
+              else pomoSwitchMode("short");
+            } else {
+              pomoSwitchMode("work");
+            }
+            return 0;
+          }
+          return t - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(pomoIntervalRef.current);
+    }
+    return () => clearInterval(pomoIntervalRef.current);
+  }, [pomoRunning, pomoPlayBeep, pomoSwitchMode]);
+
+  const pomoReset = useCallback(() => {
+    setPomoRunning(false);
+    setPomoTimeLeft(pomoSettingsRef.current[pomoModeRef.current] * 60);
+  }, []);
+
+  const pomoSaveSettings = useCallback(() => {
+    setPomoEditSettings(es => {
+      const s = { work:parseInt(es.work)||25, short:parseInt(es.short)||5, long:parseInt(es.long)||15, longAfter:parseInt(es.longAfter)||4 };
+      setPomoSettings(s);
+      try { localStorage.setItem("ht-pomo-settings", JSON.stringify(s)); } catch {}
+      setPomoTimeLeft(s.work * 60);
+      setPomoMode("work");
+      setPomoRunning(false);
+      setPomoShowSettings(false);
+      return es;
+    });
+  }, []);
+
+  const pomoProps = {
+    settings:pomoSettings, mode:pomoMode, timeLeft:pomoTimeLeft, running:pomoRunning,
+    session:pomoSession, log:pomoLog, showSettings:pomoShowSettings, editSettings:pomoEditSettings,
+    setRunning:setPomoRunning, setEditSettings:setPomoEditSettings, setShowSettings:setPomoShowSettings,
+    setLog:setPomoLog, switchMode:pomoSwitchMode, reset:pomoReset, saveSettings:pomoSaveSettings,
+    MODES:POMO_MODES,
+  };
+
+  // форматированное время для мини-виджета
+  const pomoMM = String(Math.floor(pomoTimeLeft / 60)).padStart(2,"0");
+  const pomoSS = String(pomoTimeLeft % 60).padStart(2,"0");
+
   const NAV_ITEMS = [
     {id:"year",label:"Год",icon:"📊"},
     {id:"life",label:"70 лет",icon:"⏳"},
@@ -504,20 +744,55 @@ function AppInner({ currentUser, onLogout }){
     {id:"ai",label:"ИИ",icon:"🤖"},
     {id:"motivation",label:"Мотивация",icon:"🔥"},
     {id:"pomodoro",label:"Помодоро",icon:"⏱️"},
+    {id:"content",label:"Контент",icon:"🎥"},
+    {id:"board",label:"Доска идей",icon:"💡"},
   ];
 
   return(
-    <div style={{minHeight:"100vh",background:"#060b18",fontFamily:"'Inter',system-ui,sans-serif",color:"#e2e8f0",position:"relative",overflow:"hidden"}}>
+    <UserCtx.Provider value={userId}>
+    <div data-theme={theme} style={{minHeight:"100vh",background:"var(--app-bg)",fontFamily:"'Inter',system-ui,sans-serif",color:"var(--app-fg)",position:"relative",overflow:"hidden",transition:"filter .35s ease, background .35s ease, color .35s ease", filter: theme === "mono" ? "grayscale(1)" : "none"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
+
+        /* ── CSS VARIABLES ── */
+        :root, [data-theme="original"] {
+          --app-bg: #060b18;
+          --app-fg: #e2e8f0;
+          --app-fg2: #94a3b8;
+          --app-fg3: #64748b;
+          --app-fg4: #475569;
+          --app-fg5: #334155;
+          --accent: #818cf8;
+          --accent2: #a78bfa;
+          --accent-glow: rgba(129,140,248,0.4);
+          --card-bg: rgba(15,23,42,0.7);
+          --card-border: rgba(255,255,255,0.08);
+          --card-border2: rgba(255,255,255,0.06);
+          --nav-bg: rgba(6,11,24,0.85);
+          --inp-bg: rgba(255,255,255,0.05);
+          --inp-border: rgba(255,255,255,0.1);
+          --grid-color: rgba(255,255,255,0.02);
+          --shadow: rgba(0,0,0,0.4);
+          --shadow-lg: rgba(0,0,0,0.5);
+          --aurora-vis: 1;
+          --nav-active-bg: linear-gradient(135deg,rgba(129,140,248,0.25),rgba(167,139,250,0.15));
+          --nav-active-color: #c7d2fe;
+          --nav-active-border: rgba(129,140,248,0.4);
+          --nav-active-shadow: 0 0 20px rgba(129,140,248,0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+          --scrollbar: rgba(129,140,248,0.3);
+          --scrollbar-hover: rgba(129,140,248,0.5);
+          --hover-overlay: rgba(129,140,248,0.15);
+          --separator: rgba(255,255,255,0.06);
+        }
+
         ::-webkit-scrollbar{width:4px;height:4px;}
         ::-webkit-scrollbar-track{background:transparent;}
-        ::-webkit-scrollbar-thumb{background:rgba(129,140,248,0.3);border-radius:4px;}
-        ::-webkit-scrollbar-thumb:hover{background:rgba(129,140,248,0.5);}
+        ::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:4px;}
+        ::-webkit-scrollbar-thumb:hover{background:var(--scrollbar-hover);}
 
         /* Background Aurora */
-        .bg-aurora{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+        .bg-aurora{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;opacity:var(--aurora-vis);transition:opacity .35s ease;}
         .aurora-1{position:absolute;width:800px;height:800px;top:-200px;left:-200px;border-radius:50%;background:radial-gradient(ellipse,rgba(99,102,241,0.12) 0%,transparent 70%);animation:auroraFloat 18s ease-in-out infinite;}
         .aurora-2{position:absolute;width:600px;height:600px;top:30%;right:-100px;border-radius:50%;background:radial-gradient(ellipse,rgba(167,139,250,0.09) 0%,transparent 70%);animation:auroraFloat 24s ease-in-out infinite reverse;}
         .aurora-3{position:absolute;width:500px;height:500px;bottom:-100px;left:40%;border-radius:50%;background:radial-gradient(ellipse,rgba(20,184,166,0.07) 0%,transparent 70%);animation:auroraFloat 20s ease-in-out infinite 3s;}
@@ -525,26 +800,26 @@ function AppInner({ currentUser, onLogout }){
 
         /* Grid lines bg */
         .bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;
-          background-image:linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);
-          background-size:60px 60px;}
+          background-image:linear-gradient(var(--grid-color) 1px,transparent 1px),linear-gradient(90deg,var(--grid-color) 1px,transparent 1px);
+          background-size:60px 60px;transition:background .35s ease;}
 
         /* Nav */
-        .nav-btn{position:relative;transition:all .25s cubic-bezier(.34,1.2,.64,1);overflow:hidden;}
-        .nav-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(129,140,248,0.15),rgba(167,139,250,0.1));opacity:0;transition:opacity .2s;border-radius:inherit;}
+        .nav-btn{position:relative;transition:all .25s cubic-bezier(.34,1.2,.64,1);overflow:hidden;color:var(--app-fg3);}
+        .nav-btn::before{content:'';position:absolute;inset:0;background:var(--hover-overlay);opacity:0;transition:opacity .2s;border-radius:inherit;}
         .nav-btn:hover::before{opacity:1;}
         .nav-btn:hover{transform:translateY(-1px);}
         .nav-btn:active{transform:scale(.95);}
-        .nav-btn-active{background:linear-gradient(135deg,rgba(129,140,248,0.25),rgba(167,139,250,0.15)) !important;color:#c7d2fe !important;border-color:rgba(129,140,248,0.4) !important;box-shadow:0 0 20px rgba(129,140,248,0.2), inset 0 1px 0 rgba(255,255,255,0.1) !important;}
+        .nav-btn-active{background:var(--nav-active-bg) !important;color:var(--nav-active-color) !important;border-color:var(--nav-active-border) !important;box-shadow:var(--nav-active-shadow) !important;}
 
         /* Glass card */
-        .glass-card{transition:box-shadow .3s ease,transform .3s ease;}
-        .glass-card:hover{box-shadow:0 8px 50px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.06),inset 0 1px 0 rgba(255,255,255,0.08) !important;}
-
-        /* Card hover lift */
+        .glass-card{
+          background:var(--card-bg) !important;
+          border-color:var(--card-border) !important;
+          backdrop-filter:blur(20px);
+          transition:box-shadow .35s ease, transform .3s ease, background .35s ease !important;
+        }
         .card-lift{transition:transform .25s cubic-bezier(.34,1.2,.64,1),box-shadow .25s ease;}
-        .card-lift:hover{transform:translateY(-3px);box-shadow:0 16px 50px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.08) !important;}
-
-        /* Animations */
+        .card-lift:hover{transform:translateY(-3px);box-shadow:0 16px 50px var(--shadow-lg),0 0 0 1px var(--card-border2) !important;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(22px) scale(0.97);filter:blur(4px);}to{opacity:1;transform:none;filter:blur(0);}}
         @keyframes slideFromRight{from{opacity:0;transform:translateX(60px) scale(0.98);filter:blur(3px);}to{opacity:1;transform:none;filter:blur(0);}}
         @keyframes slideFromLeft{from{opacity:0;transform:translateX(-60px) scale(0.98);filter:blur(3px);}to{opacity:1;transform:none;filter:blur(0);}}
@@ -569,18 +844,166 @@ function AppInner({ currentUser, onLogout }){
         .stagger-child:nth-child(5){animation-delay:.25s;}
         .stagger-child:nth-child(n+6){animation-delay:.3s;}
 
+        /* ── NEW ANIMATIONS ── */
+        @keyframes particleFloat{
+          0%{transform:translate(0,0) scale(1);opacity:.6;}
+          25%{transform:translate(12px,-18px) scale(1.15);opacity:.9;}
+          50%{transform:translate(-8px,-32px) scale(.85);opacity:.5;}
+          75%{transform:translate(18px,-22px) scale(1.05);opacity:.8;}
+          100%{transform:translate(0,0) scale(1);opacity:.6;}
+        }
+        @keyframes gradientFlow{
+          0%,100%{background-position:0% 50%;}
+          50%{background-position:100% 50%;}
+        }
+        @keyframes navIndicator{
+          from{transform:scaleX(0);opacity:0;}
+          to{transform:scaleX(1);opacity:1;}
+        }
+        @keyframes rippleOut{
+          0%{transform:scale(0);opacity:.5;}
+          100%{transform:scale(4);opacity:0;}
+        }
+        @keyframes badgePop{
+          0%{transform:scale(0) rotate(-20deg);opacity:0;}
+          60%{transform:scale(1.25) rotate(6deg);opacity:1;}
+          100%{transform:scale(1) rotate(0);opacity:1;}
+        }
+        @keyframes morphBorder{
+          0%,100%{border-radius:16px;}
+          50%{border-radius:20px 12px 18px 14px;}
+        }
+        @keyframes shimmerMove{
+          0%{transform:translateX(-100%);}
+          100%{transform:translateX(200%);}
+        }
+        @keyframes orbFloat{
+          0%,100%{transform:translate(0,0) scale(1);}
+          33%{transform:translate(-15px,20px) scale(1.08);}
+          66%{transform:translate(20px,-10px) scale(.93);}
+        }
+        @keyframes logoSpin{
+          0%{transform:rotate(0deg);}
+          100%{transform:rotate(360deg);}
+        }
+        @keyframes starTwinkle{
+          0%,100%{opacity:0;transform:scale(0);}
+          50%{opacity:1;transform:scale(1);}
+        }
+        @keyframes slideUp{
+          from{opacity:0;transform:translateY(14px);}
+          to{opacity:1;transform:translateY(0);}
+        }
+        @keyframes glowRing{
+          0%,100%{box-shadow:0 0 0 0 var(--accent-glow);}
+          50%{box-shadow:0 0 0 6px transparent;}
+        }
+        @keyframes countUp{
+          from{opacity:0;transform:translateY(8px) scale(.9);}
+          to{opacity:1;transform:none;}
+        }
+        @keyframes hoverLift{
+          to{transform:translateY(-4px) scale(1.01);}
+        }
+        @keyframes textShimmer{
+          0%{background-position:200% center;}
+          100%{background-position:-200% center;}
+        }
+
+        /* Gradient animated text */
+        .grad-text-anim{
+          background:linear-gradient(90deg,#c7d2fe,#a78bfa,#818cf8,#c7d2fe);
+          background-size:300% auto;
+          -webkit-background-clip:text;
+          -webkit-text-fill-color:transparent;
+          animation:textShimmer 4s linear infinite;
+        }
+
+        /* Shimmer progress overlay */
+        .progress-shimmer{position:relative;overflow:hidden;}
+        .progress-shimmer::after{
+          content:'';position:absolute;top:0;left:0;width:40%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent);
+          animation:shimmerMove 2.5s ease-in-out infinite;
+          border-radius:99px;
+        }
+
+        /* Ripple button */
+        .btn-ripple{position:relative;overflow:hidden;}
+        .btn-ripple::after{
+          content:'';position:absolute;top:50%;left:50%;
+          width:8px;height:8px;border-radius:50%;
+          background:rgba(255,255,255,0.35);
+          transform:scale(0);
+          animation:none;
+          transform-origin:center;
+          margin:-4px 0 0 -4px;
+        }
+        .btn-ripple:active::after{animation:rippleOut .5s ease-out forwards;}
+
+        /* Glow ring on focus */
+        .glow-ring:focus{animation:glowRing .6s ease-out;}
+
+        /* Nav indicator bar */
+        .nav-active-line{
+          position:absolute;bottom:-1px;left:10%;right:10%;height:2px;
+          background:linear-gradient(90deg,transparent,var(--accent),transparent);
+          border-radius:99px;animation:navIndicator .3s cubic-bezier(.34,1.4,.64,1) both;
+        }
+
+        /* Floating particle */
+        .particle{
+          position:absolute;border-radius:50%;pointer-events:none;
+          background:radial-gradient(circle,currentColor 0%,transparent 70%);
+        }
+        .p1{width:5px;height:5px;top:18%;left:8%;color:rgba(129,140,248,0.6);animation:particleFloat 14s ease-in-out infinite;}
+        .p2{width:4px;height:4px;top:55%;left:15%;color:rgba(167,139,250,0.5);animation:particleFloat 18s ease-in-out infinite 2s;}
+        .p3{width:6px;height:6px;top:30%;right:12%;color:rgba(20,184,166,0.4);animation:particleFloat 16s ease-in-out infinite 5s;}
+        .p4{width:3px;height:3px;top:70%;right:20%;color:rgba(236,72,153,0.5);animation:particleFloat 20s ease-in-out infinite 3s;}
+        .p5{width:5px;height:5px;bottom:20%;left:45%;color:rgba(59,130,246,0.45);animation:particleFloat 22s ease-in-out infinite 7s;}
+        .p6{width:4px;height:4px;top:45%;left:60%;color:rgba(245,158,11,0.35);animation:particleFloat 17s ease-in-out infinite 1s;}
+        .p7{width:3px;height:3px;top:80%;left:30%;color:rgba(129,140,248,0.4);animation:particleFloat 25s ease-in-out infinite 9s;}
+        .p8{width:6px;height:6px;top:10%;right:35%;color:rgba(167,139,250,0.3);animation:particleFloat 19s ease-in-out infinite 4s;}
+
+        /* Card entrance */
+        .card-enter{animation:fadeUp .5s cubic-bezier(.22,.68,0,1.2) both;}
+
+        /* Stat pop animation */
+        .stat-pop{animation:countUp .4s cubic-bezier(.34,1.4,.64,1) both;}
+
+        /* Hover glow card */
+        .glass-card:hover{
+          box-shadow:0 8px 50px var(--shadow-lg),0 0 0 1px var(--card-border2),inset 0 1px 0 rgba(255,255,255,0.1),0 0 40px rgba(129,140,248,0.08) !important;
+          transform:translateY(-1px);
+        }
+
         /* Table */
         .hrow{transition:background .15s;}
-        .hrow:hover>td{background:rgba(129,140,248,0.05) !important;}
-        .tx-row:hover{background:rgba(255,255,255,0.03) !important;}
+        .hrow:hover>td{background:var(--hover-overlay) !important;}
+        .tx-row:hover{background:var(--hover-overlay) !important;}
         .weekcell{transition:transform .12s cubic-bezier(.34,1.4,.64,1);}
         .weekcell:hover{transform:scale(1.9);z-index:20;}
 
-        textarea:focus,input:focus{outline:none !important;border-color:rgba(129,140,248,0.5) !important;box-shadow:0 0 0 3px rgba(129,140,248,0.1) !important;}
+        textarea:focus,input:focus{outline:none !important;border-color:var(--accent-glow) !important;box-shadow:0 0 0 3px var(--accent-glow) !important;}
         button:active:not(:disabled){transform:scale(.94);}
 
         /* Stat number */
         .stat-num{font-family:'JetBrains Mono',monospace;font-weight:700;}
+
+        /* Theme switcher pill */
+        .theme-pill {
+          display: flex; align-items: center; gap: 2px;
+          background: var(--inp-bg); border: 1px solid var(--card-border);
+          border-radius: 20px; padding: 3px; transition: all .25s ease;
+        }
+        .theme-opt {
+          width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; font-size: 13px;
+          transition: all .2s cubic-bezier(.34,1.2,.64,1);
+        }
+        .theme-opt-active-orig { background: linear-gradient(135deg,#818cf8,#a78bfa); box-shadow: 0 2px 10px rgba(129,140,248,0.5); }
+        .theme-opt-active-mono { background: #ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.1) !important; }
+        .theme-opt-inactive { background: transparent; color: var(--app-fg4); }
       `}</style>
 
       {/* Ambient background */}
@@ -590,76 +1013,146 @@ function AppInner({ currentUser, onLogout }){
         <div className="aurora-2"/>
         <div className="aurora-3"/>
       </div>
+      {/* Floating particles */}
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0,overflow:"hidden",opacity:"var(--aurora-vis)"}}>
+        <div className="particle p1"/><div className="particle p2"/><div className="particle p3"/>
+        <div className="particle p4"/><div className="particle p5"/><div className="particle p6"/>
+        <div className="particle p7"/><div className="particle p8"/>
+      </div>
 
       {/* NAV */}
       <div style={{
         position:"sticky",top:0,zIndex:100,
-        background:"rgba(6,11,24,0.85)",
+        background:"var(--nav-bg)",
         backdropFilter:"blur(24px) saturate(180%)",
-        borderBottom:"1px solid rgba(255,255,255,0.06)",
-        boxShadow:"0 4px 30px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.04)",
+        borderBottom:"1px solid var(--separator)",
+        boxShadow:"0 4px 30px var(--shadow), 0 1px 0 var(--card-border2)",
+        transition:"background .35s ease, border-color .35s ease",
       }}>
-        <div style={{maxWidth:1600,margin:"0 auto",display:"flex",alignItems:"center",gap:5,overflowX:"auto",padding:"10px 16px"}}>
+        <div style={{maxWidth:1900,margin:"0 auto",display:"flex",alignItems:"center",gap:5,overflowX:"auto",padding:"10px 16px"}}>
           {/* Logo */}
           <div style={{display:"flex",alignItems:"center",gap:10,marginRight:12,flexShrink:0}}>
-            <div style={{
-              width:32,height:32,borderRadius:10,
-              background:"linear-gradient(135deg,#818cf8,#a78bfa)",
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,
-              boxShadow:"0 4px 15px rgba(129,140,248,0.5)",
-              animation:"glowPulse 3s ease infinite",
-              color:"white",
-            }}>🎯</div>
+            <div style={{position:"relative"}}>
+              <div style={{
+                width:32,height:32,borderRadius:10,
+                background:"linear-gradient(135deg,#818cf8,#a78bfa)",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,
+                boxShadow:"0 4px 15px rgba(129,140,248,0.5)",
+                animation:"glowPulse 3s ease infinite",
+                color:"white",
+              }}>🎯</div>
+              {/* Orbiting dot */}
+              <div style={{
+                position:"absolute",top:"50%",left:"50%",width:28,height:28,
+                marginTop:-14,marginLeft:-14,
+                animation:"logoSpin 6s linear infinite",
+                pointerEvents:"none",
+              }}>
+                <div style={{
+                  position:"absolute",top:-3,left:"50%",marginLeft:-2,
+                  width:4,height:4,borderRadius:"50%",
+                  background:"#c7d2fe",
+                  boxShadow:"0 0 6px #818cf8",
+                  animation:"starTwinkle 2s ease-in-out infinite",
+                }}/>
+              </div>
+            </div>
             <span style={{
               fontFamily:"'JetBrains Mono',monospace",fontWeight:700,fontSize:13,letterSpacing:"0.05em",
-              background:"linear-gradient(90deg,#c7d2fe,#a78bfa)",
+              background:"linear-gradient(90deg,#c7d2fe,#a78bfa,#818cf8,#c7d2fe)",
+              backgroundSize:"300% auto",
               WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
               whiteSpace:"nowrap",
-            }}>ТРЕКЕР {YEAR}</span>
+              animation:"textShimmer 4s linear infinite",
+            }}>ТРЕКЕР</span>
           </div>
 
           {/* Main nav */}
           {NAV_ITEMS.map(v=>(
             <button key={v.id}
-              className={`nav-btn${view===v.id?" nav-btn-active":""}`}
+              className={`nav-btn btn-ripple${view===v.id?" nav-btn-active":""}`}
               onClick={()=>navigateTo(v.id)}
               style={{
                 padding:"7px 16px",borderRadius:10,
-                border:`1px solid ${view===v.id?"rgba(129,140,248,0.4)":"rgba(255,255,255,0.06)"}`,
+                border:`1px solid ${view===v.id?"var(--nav-active-border)":"var(--card-border)"}`,
                 cursor:"pointer",flexShrink:0,
-                background:view===v.id?"rgba(129,140,248,0.2)":"transparent",
-                color:view===v.id?"#c7d2fe":"#64748b",
+                background:view===v.id?"var(--nav-active-bg)":"transparent",
+                color:view===v.id?"var(--nav-active-color)":"var(--app-fg3)",
                 fontWeight:600,fontSize:13,letterSpacing:"-0.2px",
+                position:"relative",
               }}>
               <span style={{marginRight:6}}>{v.icon}</span>{v.label}
+              {view===v.id && <div className="nav-active-line"/>}
             </button>
           ))}
 
-          <div style={{width:1,height:24,background:"rgba(255,255,255,0.08)",flexShrink:0,margin:"0 5px"}}/>
+          <div style={{width:1,height:24,background:"var(--separator)",flexShrink:0,margin:"0 5px"}}/>
 
           {/* Month nav */}
           {MONTHS_SHORT.map((m,i)=>(
-            <button key={i} className="nav-btn"
+            <button key={i} className="nav-btn btn-ripple"
               onClick={()=>navigateTo("month", i)}
               style={{
                 padding:"7px 11px",borderRadius:9,
-                border:`1px solid ${view==="month"&&curMonth===i?"rgba(129,140,248,0.4)":"transparent"}`,
+                border:`1px solid ${view==="month"&&curMonth===i?"var(--nav-active-border)":"transparent"}`,
                 cursor:"pointer",flexShrink:0,
-                background:view==="month"&&curMonth===i?"rgba(129,140,248,0.2)":"transparent",
-                color:view==="month"&&curMonth===i?"#c7d2fe":"#475569",
+                background:view==="month"&&curMonth===i?"var(--nav-active-bg)":"transparent",
+                color:view==="month"&&curMonth===i?"var(--nav-active-color)":"var(--app-fg4)",
                 fontWeight:view==="month"&&curMonth===i?700:500,fontSize:13,
+                position:"relative",
               }}>
               {m}
+              {view==="month"&&curMonth===i && <div className="nav-active-line"/>}
             </button>
           ))}
 
-          {/* User + logout */}
+          {/* User + theme + logout */}
           <div style={{marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:12,color:"#475569",fontFamily:"'JetBrains Mono',monospace",whiteSpace:"nowrap"}}>👤 {currentUser}</span>
+
+            {/* Мини-виджет помодоро — виден когда таймер идёт и ты не на вкладке помодоро */}
+            {pomoRunning && view !== "pomodoro" && (
+              <button onClick={() => navigateTo("pomodoro")}
+                style={{
+                  display:"flex", alignItems:"center", gap:6,
+                  padding:"8px 16px", borderRadius:20,
+                  background:`linear-gradient(135deg,${POMO_MODES[pomoMode].color}22,${POMO_MODES[pomoMode].color}11)`,
+                  border:`1px solid ${POMO_MODES[pomoMode].color}55`,
+                  cursor:"pointer", flexShrink:0, transition:"all .2s",
+                  boxShadow:`0 0 14px ${POMO_MODES[pomoMode].color}22`,
+                }}
+                onMouseEnter={e=>e.currentTarget.style.background=`${POMO_MODES[pomoMode].color}33`}
+                onMouseLeave={e=>e.currentTarget.style.background=`linear-gradient(135deg,${POMO_MODES[pomoMode].color}22,${POMO_MODES[pomoMode].color}11)`}
+                title="Перейти к помодоро">
+                <span style={{fontSize:11}}>{POMO_MODES[pomoMode].icon}</span>
+                <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,fontWeight:700,color:POMO_MODES[pomoMode].color,letterSpacing:"0.5px"}}>{pomoMM}:{pomoSS}</span>
+                <span style={{width:6,height:6,borderRadius:"50%",background:POMO_MODES[pomoMode].color,animation:"pulse 1s ease-in-out infinite",flexShrink:0}}/>
+              </button>
+            )}
+
+            <span style={{fontSize:12,color:"var(--app-fg4)",fontFamily:"'JetBrains Mono',monospace",whiteSpace:"nowrap"}}>👤 {currentUser}</span>
+
+            {/* Theme switcher */}
+            <div className="theme-pill" title="Сменить тему">
+              <button
+                className={`theme-opt ${theme==="original" ? "theme-opt-active-orig" : "theme-opt-inactive"}`}
+                onClick={()=>{ if(theme!=="original"){ setTheme("original"); localStorage.setItem(K("theme"),"original"); } }}
+                title="Оригинальная тема"
+                style={{color: theme==="original" ? "white" : "var(--app-fg3)"}}>
+                🌙
+              </button>
+              <button
+                className={`theme-opt ${theme==="mono" ? "theme-opt-active-mono" : "theme-opt-inactive"}`}
+                onClick={()=>{ if(theme!=="mono"){ setTheme("mono"); localStorage.setItem(K("theme"),"mono"); } }}
+                title="Чёрно-белая (iOS)"
+                style={{color: theme==="mono" ? "#1c1c1e" : "var(--app-fg3)"}}>
+                ☀️
+              </button>
+            </div>
+
             <button onClick={onLogout}
-              style={{padding:"6px 12px",borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.04)",color:"#475569",cursor:"pointer",fontSize:12,transition:"all .2s",whiteSpace:"nowrap"}}
+              style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--card-border)",background:"var(--inp-bg)",color:"var(--app-fg4)",cursor:"pointer",fontSize:12,transition:"all .2s",whiteSpace:"nowrap"}}
               onMouseEnter={e=>{e.currentTarget.style.color="#ef4444";e.currentTarget.style.borderColor="rgba(239,68,68,0.3)";}}
-              onMouseLeave={e=>{e.currentTarget.style.color="#475569";e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";}}>
+              onMouseLeave={e=>{e.currentTarget.style.color="var(--app-fg4)";e.currentTarget.style.borderColor="var(--card-border)";}}>
               Выйти
             </button>
           </div>
@@ -674,10 +1167,13 @@ function AppInner({ currentUser, onLogout }){
           {view==="finance" && <FinanceView  finances={finances} saveFinances={saveFinances}/>}
           {view==="ai"      && <AIChatView  habits={habits} completions={completions} finances={finances} monthCount={monthCount} yearCount={yearCount}/>}
           {view==="motivation" && <MotivationView/>}
-          {view==="pomodoro"   && <PomodoroView/>}
+          {view==="pomodoro"   && <PomodoroView {...pomoProps}/>}
+          {view==="content"    && <ContentPlanView/>}
+          {view==="board"      && <IdeaBoardView/>}
         </AnimatedSection>
       </div>
     </div>
+  </UserCtx.Provider>
   );
 }
 
@@ -970,6 +1466,397 @@ ${goalsList || "Целей пока нет"}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// WEEKLY PLANNER
+// ═══════════════════════════════════════════════════════════════════════════════
+const WEEK_DAYS = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+const WEEK_DAYS_FULL = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
+const TASK_COLORS = [
+  {id:"indigo", label:"Учёба",    color:"#818cf8"},
+  {id:"emerald",label:"Здоровье", color:"#10b981"},
+  {id:"amber",  label:"Контент",  color:"#f59e0b"},
+  {id:"rose",   label:"Личное",   color:"#f43f5e"},
+  {id:"sky",    label:"Работа",   color:"#38bdf8"},
+  {id:"violet", label:"Другое",   color:"#a78bfa"},
+];
+
+function getWeekMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function fmtDate(d) {
+  return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+function weekKey(monday) {
+  return monday.toISOString().slice(0,10);
+}
+
+function WeeklyPlanner() {
+  const uid = useUserId();
+  const WK = k => `ht-${uid}-wplanner-${k}`;
+
+  const [weekStart, setWeekStart] = useState(() => getWeekMonday(new Date()));
+  // tasks: { [weekKey]: { [dayIdx]: [{id, text, done, color}] } }
+  const [allTasks, setAllTasks] = useState(() => {
+    try { const v = localStorage.getItem(WK("tasks")); return v ? JSON.parse(v) : {}; } catch { return {}; }
+  });
+  const [addingDay, setAddingDay] = useState(null); // dayIdx being edited
+  const [draftText, setDraftText] = useState("");
+  const [draftColor, setDraftColor] = useState("indigo");
+  const [editId, setEditId] = useState(null); // {dayIdx, taskId}
+  const [editText, setEditText] = useState("");
+
+  const saveTasks = (next) => {
+    setAllTasks(next);
+    try { localStorage.setItem(WK("tasks"), JSON.stringify(next)); } catch {}
+  };
+
+  const wk = weekKey(weekStart);
+  const dayTasks = (dayIdx) => allTasks[wk]?.[dayIdx] || [];
+
+  const addTask = (dayIdx) => {
+    if (!draftText.trim()) return;
+    const task = { id: Date.now(), text: draftText.trim(), done: false, color: draftColor };
+    const next = {
+      ...allTasks,
+      [wk]: { ...(allTasks[wk] || {}), [dayIdx]: [...dayTasks(dayIdx), task] }
+    };
+    saveTasks(next);
+    setDraftText("");
+    setAddingDay(null);
+  };
+
+  const toggleTask = (dayIdx, taskId) => {
+    const next = {
+      ...allTasks,
+      [wk]: {
+        ...(allTasks[wk] || {}),
+        [dayIdx]: dayTasks(dayIdx).map(t => t.id === taskId ? { ...t, done: !t.done } : t)
+      }
+    };
+    saveTasks(next);
+  };
+
+  const deleteTask = (dayIdx, taskId) => {
+    const next = {
+      ...allTasks,
+      [wk]: {
+        ...(allTasks[wk] || {}),
+        [dayIdx]: dayTasks(dayIdx).filter(t => t.id !== taskId)
+      }
+    };
+    saveTasks(next);
+  };
+
+  const saveEdit = (dayIdx, taskId) => {
+    if (!editText.trim()) return;
+    const next = {
+      ...allTasks,
+      [wk]: {
+        ...(allTasks[wk] || {}),
+        [dayIdx]: dayTasks(dayIdx).map(t => t.id === taskId ? { ...t, text: editText.trim() } : t)
+      }
+    };
+    saveTasks(next);
+    setEditId(null);
+  };
+
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const todayIdx = (() => {
+    for (let i = 0; i < 7; i++) {
+      if (addDays(weekStart, i).getTime() === now.getTime()) return i;
+    }
+    return -1;
+  })();
+
+  const isCurrentWeek = weekKey(getWeekMonday(new Date())) === wk;
+
+  // week stats
+  const totalTasks = WEEK_DAYS.reduce((s,_,i) => s + dayTasks(i).length, 0);
+  const doneTasks  = WEEK_DAYS.reduce((s,_,i) => s + dayTasks(i).filter(t=>t.done).length, 0);
+  const weekPct    = totalTasks ? Math.round(doneTasks/totalTasks*100) : 0;
+
+  return (
+    <GlassCard style={{ marginTop: 28, overflow:"hidden" }} glow="#10b981">
+      {/* ── Header ── */}
+      <div style={{
+        padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12,
+        borderBottom:"1px solid rgba(255,255,255,0.06)",
+        background:"linear-gradient(135deg,rgba(16,185,129,0.1),rgba(59,130,246,0.05))",
+      }}>
+        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:18, color:"#e2e8f0", letterSpacing:"-0.5px", display:"flex", alignItems:"center", gap:8 }}>
+              📅 Планировщик недели
+              {isCurrentWeek && (
+                <span style={{ fontSize:11, fontWeight:700, background:"linear-gradient(135deg,#10b981,#34d399)", color:"white", borderRadius:20, padding:"2px 10px", letterSpacing:"0.04em" }}>
+                  СЕЙЧАС
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize:12, color:"#64748b", marginTop:3 }}>
+              {fmtDate(weekStart)} — {fmtDate(addDays(weekStart,6))}
+              {totalTasks > 0 && (
+                <span style={{ marginLeft:10 }}>
+                  <span style={{ color:"#34d399", fontWeight:700 }}>{doneTasks}</span>
+                  <span style={{ color:"#475569" }}>/{totalTasks} выполнено</span>
+                  <span style={{ marginLeft:6, color:"#818cf8", fontWeight:700 }}>{weekPct}%</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Week nav */}
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <button onClick={() => setWeekStart(getWeekMonday(addDays(weekStart,-7)))}
+            className="btn-ripple"
+            style={{ width:34, height:34, borderRadius:9, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"#94a3b8", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#e2e8f0";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#94a3b8";}}>
+            ←
+          </button>
+          {!isCurrentWeek && (
+            <button onClick={() => setWeekStart(getWeekMonday(new Date()))}
+              className="btn-ripple"
+              style={{ padding:"7px 14px", borderRadius:9, border:"1px solid rgba(16,185,129,0.35)", background:"rgba(16,185,129,0.1)", color:"#34d399", cursor:"pointer", fontSize:12, fontWeight:700, transition:"all .2s" }}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(16,185,129,0.18)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(16,185,129,0.1)"}>
+              Сегодня
+            </button>
+          )}
+          <button onClick={() => setWeekStart(getWeekMonday(addDays(weekStart,7)))}
+            className="btn-ripple"
+            style={{ width:34, height:34, borderRadius:9, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"#94a3b8", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#e2e8f0";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#94a3b8";}}>
+            →
+          </button>
+        </div>
+      </div>
+
+      {/* ── Week progress bar ── */}
+      {totalTasks > 0 && (
+        <div style={{ height:3, background:"rgba(255,255,255,0.04)" }}>
+          <div className="progress-shimmer" style={{ width:`${weekPct}%`, height:"100%", background:"linear-gradient(90deg,#10b981,#34d399)", transition:"width .7s cubic-bezier(.34,1.2,.64,1)", boxShadow:"0 0 10px #10b98155" }}/>
+        </div>
+      )}
+
+      {/* ── Days grid ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:0 }}>
+        {WEEK_DAYS.map((day, dayIdx) => {
+          const date   = addDays(weekStart, dayIdx);
+          const tasks  = dayTasks(dayIdx);
+          const isToday = dayIdx === todayIdx;
+          const isWeekend = dayIdx >= 5;
+          const doneCount = tasks.filter(t=>t.done).length;
+          const isAdding  = addingDay === dayIdx;
+
+          return (
+            <div key={dayIdx} style={{
+              borderRight: dayIdx < 6 ? "1px solid rgba(255,255,255,0.05)" : "none",
+              background: isToday
+                ? "linear-gradient(180deg,rgba(16,185,129,0.07) 0%,rgba(16,185,129,0.03) 100%)"
+                : isWeekend ? "rgba(255,255,255,0.008)" : "transparent",
+              display:"flex", flexDirection:"column",
+              minHeight: 200,
+              transition:"background .2s",
+              animation:`fadeUp .4s ${dayIdx*0.05}s cubic-bezier(.22,.68,0,1.2) both`,
+            }}>
+              {/* Day header */}
+              <div style={{
+                padding:"12px 10px 8px",
+                borderBottom:"1px solid rgba(255,255,255,0.05)",
+                display:"flex", flexDirection:"column", gap:2,
+                background: isToday ? "rgba(16,185,129,0.06)" : "transparent",
+              }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <span style={{
+                    fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase",
+                    color: isToday ? "#34d399" : isWeekend ? "#f43f5e" : "#64748b",
+                  }}>{day}</span>
+                  {tasks.length > 0 && (
+                    <span style={{
+                      fontSize:10, fontWeight:700, color: doneCount===tasks.length ? "#34d399" : "#475569",
+                      fontFamily:"'JetBrains Mono',monospace",
+                      background: doneCount===tasks.length ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
+                      borderRadius:20, padding:"1px 7px",
+                      transition:"all .3s",
+                    }}>{doneCount}/{tasks.length}</span>
+                  )}
+                </div>
+                <div style={{
+                  fontSize: isToday ? 22 : 18,
+                  fontWeight:800,
+                  color: isToday ? "#34d399" : "#e2e8f0",
+                  fontFamily:"'JetBrains Mono',monospace",
+                  lineHeight:1,
+                  transition:"font-size .2s",
+                }}>
+                  {String(date.getDate()).padStart(2,"0")}
+                  {isToday && <span style={{ fontSize:9, marginLeft:4, color:"#10b981", verticalAlign:"middle", letterSpacing:"0.05em" }}>СЕГОДНЯ</span>}
+                </div>
+              </div>
+
+              {/* Tasks list */}
+              <div style={{ flex:1, padding:"8px 8px 4px", display:"flex", flexDirection:"column", gap:4 }}>
+                {tasks.map(task => {
+                  const tc = TASK_COLORS.find(c=>c.id===task.color) || TASK_COLORS[0];
+                  const isEditing = editId?.dayIdx===dayIdx && editId?.taskId===task.id;
+                  return (
+                    <div key={task.id}
+                      style={{
+                        display:"flex", alignItems:"flex-start", gap:6, padding:"6px 7px",
+                        borderRadius:8,
+                        background: task.done ? "rgba(255,255,255,0.02)" : `${tc.color}0d`,
+                        border:`1px solid ${task.done ? "rgba(255,255,255,0.04)" : `${tc.color}28`}`,
+                        transition:"all .2s",
+                        cursor:"default",
+                        animation:"fadeUp .25s ease both",
+                      }}
+                      onMouseEnter={e=>e.currentTarget.querySelector(".task-del")?.style && (e.currentTarget.querySelector(".task-del").style.opacity="1")}
+                      onMouseLeave={e=>e.currentTarget.querySelector(".task-del")?.style && (e.currentTarget.querySelector(".task-del").style.opacity="0")}
+                    >
+                      {/* Color dot / checkbox */}
+                      <div onClick={() => toggleTask(dayIdx, task.id)}
+                        style={{
+                          flexShrink:0, marginTop:1,
+                          width:14, height:14, borderRadius:4,
+                          border:`2px solid ${task.done ? tc.color : `${tc.color}66`}`,
+                          background: task.done ? `linear-gradient(135deg,${tc.color}cc,${tc.color})` : "transparent",
+                          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                          transition:"all .2s cubic-bezier(.34,1.4,.64,1)",
+                          boxShadow: task.done ? `0 0 6px ${tc.color}55` : "none",
+                        }}>
+                        {task.done && <span style={{ color:"white", fontSize:9, fontWeight:900, animation:"checkPop .3s ease both" }}>✓</span>}
+                      </div>
+
+                      {/* Text */}
+                      <div style={{ flex:1, minWidth:0 }}>
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            value={editText}
+                            onChange={e => setEditText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key==="Enter") saveEdit(dayIdx, task.id);
+                              if (e.key==="Escape") setEditId(null);
+                            }}
+                            onBlur={() => saveEdit(dayIdx, task.id)}
+                            style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif" }}
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={() => { setEditId({dayIdx, taskId:task.id}); setEditText(task.text); }}
+                            style={{
+                              fontSize:12, color: task.done ? "#475569" : "#cbd5e1",
+                              textDecoration: task.done ? "line-through" : "none",
+                              lineHeight:1.4,
+                              wordBreak:"break-word",
+                              transition:"color .2s",
+                              cursor:"text",
+                            }}>
+                            {task.text}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Delete */}
+                      <button className="task-del" onClick={() => deleteTask(dayIdx, task.id)}
+                        style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer", color:"#334155", fontSize:12, padding:"0 2px", opacity:0, transition:"opacity .15s, color .15s", lineHeight:1 }}
+                        onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+                        onMouseLeave={e=>e.currentTarget.style.color="#334155"}>
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Add task area */}
+                {isAdding ? (
+                  <div style={{ animation:"fadeUp .2s ease" }}>
+                    <div style={{ display:"flex", gap:5, marginBottom:5, flexWrap:"wrap" }}>
+                      {TASK_COLORS.map(tc => (
+                        <div key={tc.id} onClick={() => setDraftColor(tc.id)}
+                          title={tc.label}
+                          style={{
+                            width:16, height:16, borderRadius:"50%", background:tc.color,
+                            cursor:"pointer", border: draftColor===tc.id ? "2px solid white" : "2px solid transparent",
+                            transform: draftColor===tc.id ? "scale(1.25)" : "scale(1)",
+                            transition:"all .15s", boxShadow: draftColor===tc.id ? `0 0 6px ${tc.color}` : "none",
+                          }}/>
+                      ))}
+                    </div>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <input
+                        autoFocus
+                        value={draftText}
+                        onChange={e => setDraftText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key==="Enter") addTask(dayIdx);
+                          if (e.key==="Escape") { setAddingDay(null); setDraftText(""); }
+                        }}
+                        placeholder="Задача…"
+                        style={{
+                          flex:1, padding:"6px 9px", borderRadius:8,
+                          border:`1px solid ${TASK_COLORS.find(c=>c.id===draftColor)?.color||"#818cf8"}55`,
+                          background:"rgba(255,255,255,0.05)", color:"#e2e8f0",
+                          fontSize:12, outline:"none",
+                        }}
+                      />
+                      <button onClick={() => addTask(dayIdx)}
+                        style={{ padding:"6px 10px", borderRadius:8, border:"none", background:`linear-gradient(135deg,${TASK_COLORS.find(c=>c.id===draftColor)?.color||"#818cf8"},${TASK_COLORS.find(c=>c.id===draftColor)?.color||"#818cf8"}bb)`, color:"white", cursor:"pointer", fontSize:13, fontWeight:700, transition:"all .15s" }}>
+                        +
+                      </button>
+                    </div>
+                    <div style={{ fontSize:10, color:"#334155", marginTop:4, textAlign:"center" }}>Enter — добавить · Esc — отмена</div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setAddingDay(dayIdx); setDraftText(""); setDraftColor("indigo"); }}
+                    style={{
+                      width:"100%", padding:"5px", borderRadius:8,
+                      border:"1px dashed rgba(255,255,255,0.08)",
+                      background:"transparent", color:"#334155",
+                      cursor:"pointer", fontSize:11, transition:"all .2s",
+                      marginTop: tasks.length ? 2 : 0,
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(16,185,129,0.4)";e.currentTarget.style.color="#10b981";e.currentTarget.style.background="rgba(16,185,129,0.05)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";e.currentTarget.style.color="#334155";e.currentTarget.style.background="transparent";}}>
+                    + задача
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Footer: color legend ── */}
+      <div style={{ padding:"10px 18px", borderTop:"1px solid rgba(255,255,255,0.05)", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+        <span style={{ fontSize:10, color:"#334155", fontWeight:700, letterSpacing:"0.08em" }}>КАТЕГОРИИ:</span>
+        {TASK_COLORS.map(tc => (
+          <div key={tc.id} style={{ display:"flex", alignItems:"center", gap:5 }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:tc.color, boxShadow:`0 0 5px ${tc.color}66` }}/>
+            <span style={{ fontSize:11, color:"#475569" }}>{tc.label}</span>
+          </div>
+        ))}
+        <span style={{ marginLeft:"auto", fontSize:11, color:"#2d3748" }}>двойной клик — редактировать</span>
+      </div>
+    </GlassCard>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // YEAR VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
 function YearView({habits,monthCount,yearCount,saveHabits,onMonthClick,bigGoals,saveBigGoals}){
@@ -991,8 +1878,14 @@ function YearView({habits,monthCount,yearCount,saveHabits,onMonthClick,bigGoals,
           <div>
             <div style={{fontWeight:800,fontSize:18,color:"#e2e8f0",letterSpacing:"-0.5px"}}>📈 Статистика выполнения задач</div>
             <div style={{color:"#64748b",fontSize:13,marginTop:3}}>
-              Задач: <span style={{color:"#94a3b8",fontWeight:600}}>{habits.length}</span>
-              {" · "}Средний прогресс: <span style={{color:"#818cf8",fontWeight:700}}>{avgPct}%</span>
+              Задач: <span style={{color:"#94a3b8",fontWeight:600,animation:"countUp .4s ease both"}}>{habits.length}</span>
+              {" · "}Средний прогресс: <span style={{
+                fontWeight:700,fontSize:14,
+                background:"linear-gradient(90deg,#818cf8,#a78bfa,#c7d2fe,#818cf8)",
+                backgroundSize:"300% auto",
+                WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+                animation:"textShimmer 3s linear infinite",
+              }}>{avgPct}%</span>
             </div>
           </div>
           <button onClick={()=>setShowMgr(!showMgr)}
@@ -1107,6 +2000,9 @@ function YearView({habits,monthCount,yearCount,saveHabits,onMonthClick,bigGoals,
           );
         })}
       </div>
+
+      {/* Weekly Planner */}
+      <WeeklyPlanner />
     </div>
   );
 }
@@ -1115,9 +2011,10 @@ function YearView({habits,monthCount,yearCount,saveHabits,onMonthClick,bigGoals,
 // LIFE IN WEEKS
 // ═══════════════════════════════════════════════════════════════════════════════
 function LifeView(){
+  const _uid = useUserId();
   const now=new Date();
   const [birthdateStr, setBirthdateStr] = useState(()=>{
-    try{ const v=localStorage.getItem("ht-birthdate"); return v||"2008-10-17"; }catch{ return "2008-10-17"; }
+    try{ const v=localStorage.getItem(userKey(_uid, "birthdate")); return v||"2008-10-17"; }catch{ return "2008-10-17"; }
   });
   const [editingBirth, setEditingBirth] = useState(false);
   const [tempBirth, setTempBirth] = useState(birthdateStr);
@@ -1126,7 +2023,7 @@ function LifeView(){
   const saveBirthdate = () => {
     if(!tempBirth) return;
     setBirthdateStr(tempBirth);
-    try{ localStorage.setItem("ht-birthdate", tempBirth); }catch{}
+    try{ localStorage.setItem(userKey(_uid, "birthdate"), tempBirth); }catch{}
     setEditingBirth(false);
   };
 
@@ -1738,9 +2635,11 @@ function FinanceView({ finances, saveFinances }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = "Ygx6OSFbtJRKDeHuJ0VrHU5lyAh2w1Md";
 
-const CHAT_STORAGE_KEY = "ht-ai-chat-messages";
+// CHAT_STORAGE_KEY is now dynamic (see AIChatView);
 
 function AIChatView({ habits, finances, monthCount, yearCount }) {
+  const _uid = useUserId();
+  const CHAT_STORAGE_KEY = userKey(_uid, "ai-chat-messages");
   const [messages, setMessages] = useState(() => {
     try { const v = localStorage.getItem(CHAT_STORAGE_KEY); return v ? JSON.parse(v) : []; } catch { return []; }
   });
@@ -1954,8 +2853,9 @@ ${bankStats ? `По счетам:\n${bankStats}` : ""}
 // MOTIVATION VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
 function MotivationView() {
+  const _uid = useUserId();
   const [videos, setVideos] = useState(() => {
-    try { const v = localStorage.getItem("ht-motivation-videos"); return v ? JSON.parse(v) : []; } catch { return []; }
+    try { const v = localStorage.getItem(userKey(_uid, "motivation-videos")); return v ? JSON.parse(v) : []; } catch { return []; }
   });
   const [input, setInput] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
@@ -1983,7 +2883,7 @@ function MotivationView() {
     if (videos.find(v => v.id === id)) { setError("⚠️ Это видео уже добавлено"); return; }
     const newVideos = [...videos, { id, url, addedAt: Date.now() }];
     setVideos(newVideos);
-    localStorage.setItem("ht-motivation-videos", JSON.stringify(newVideos));
+    localStorage.setItem(userKey(_uid, "motivation-videos"), JSON.stringify(newVideos));
     setActiveIdx(newVideos.length - 1);
     setInput("");
     setError("");
@@ -1992,7 +2892,7 @@ function MotivationView() {
   const removeVideo = (idx) => {
     const newVideos = videos.filter((_, i) => i !== idx);
     setVideos(newVideos);
-    localStorage.setItem("ht-motivation-videos", JSON.stringify(newVideos));
+    localStorage.setItem(userKey(_uid, "motivation-videos"), JSON.stringify(newVideos));
     setActiveIdx(Math.min(activeIdx, newVideos.length - 1));
   };
 
@@ -2114,109 +3014,8 @@ function MotivationView() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // POMODORO VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function PomodoroView() {
-  const [settings, setSettings] = useState(() => {
-    try { const v = localStorage.getItem("ht-pomo-settings"); return v ? JSON.parse(v) : { work: 25, short: 5, long: 15, longAfter: 4 }; } catch { return { work: 25, short: 5, long: 15, longAfter: 4 }; }
-  });
-  const [mode, setMode] = useState("work"); // work | short | long
-  const [timeLeft, setTimeLeft] = useState(settings.work * 60);
-  const [running, setRunning] = useState(false);
-  const [session, setSession] = useState(1);
-  const [showSettings, setShowSettings] = useState(false);
-  const [editSettings, setEditSettings] = useState({ ...settings });
-  const [log, setLog] = useState(() => {
-    try { const v = localStorage.getItem("ht-pomo-log"); return v ? JSON.parse(v) : []; } catch { return []; }
-  });
-  const intervalRef = useRef(null);
-  const audioCtx = useRef(null);
-
-  const MODES = {
-    work:  { label: "Работа",       color: "#818cf8", icon: "💼", dur: settings.work  },
-    short: { label: "Короткий перерыв", color: "#10b981", icon: "☕", dur: settings.short },
-    long:  { label: "Длинный перерыв",  color: "#f59e0b", icon: "🌿", dur: settings.long  },
-  };
-
-  const playBeep = () => {
-    try {
-      if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-      const ctx = audioCtx.current;
-      // Three loud beeps with longer duration
-      const beeps = [
-        { delay: 0,    freq: 880, dur: 0.6 },
-        { delay: 0.75, freq: 880, dur: 0.6 },
-        { delay: 1.5,  freq: 1046, dur: 1.0 },
-      ];
-      beeps.forEach(({ delay, freq, dur }) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
-        gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + delay + 0.05);
-        gain.gain.setValueAtTime(0.5, ctx.currentTime + delay + dur - 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + dur);
-        osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime + delay + dur);
-      });
-    } catch {}
-  };
-
-  const switchMode = (newMode, newSession) => {
-    setMode(newMode);
-    setTimeLeft(MODES[newMode] ? (newMode === "work" ? settings.work : newMode === "short" ? settings.short : settings.long) * 60 : settings.work * 60);
-    setRunning(false);
-    if (newSession !== undefined) setSession(newSession);
-  };
-
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft(t => {
-          if (t <= 1) {
-            clearInterval(intervalRef.current);
-            playBeep();
-            setRunning(false);
-            // Log completed session
-            if (mode === "work") {
-              const entry = { id: Date.now(), date: new Date().toISOString().slice(0,10), duration: settings.work, ts: Date.now() };
-              setLog(prev => {
-                const next = [entry, ...prev].slice(0, 200);
-                try { localStorage.setItem("ht-pomo-log", JSON.stringify(next)); } catch {}
-                return next;
-              });
-              const nextSess = session + 1;
-              setSession(nextSess);
-              if ((nextSess - 1) % settings.longAfter === 0) {
-                switchMode("long");
-              } else {
-                switchMode("short");
-              }
-            } else {
-              switchMode("work");
-            }
-            return 0;
-          }
-          return t - 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [running, mode, session]);
-
-  const reset = () => { setRunning(false); setTimeLeft(MODES[mode].dur * 60); };
-
-  const saveSettings = () => {
-    const s = { work: parseInt(editSettings.work)||25, short: parseInt(editSettings.short)||5, long: parseInt(editSettings.long)||15, longAfter: parseInt(editSettings.longAfter)||4 };
-    setSettings(s);
-    try { localStorage.setItem("ht-pomo-settings", JSON.stringify(s)); } catch {}
-    setShowSettings(false);
-    setTimeLeft(s.work * 60);
-    setMode("work");
-    setRunning(false);
-  };
+function PomodoroView({ settings, mode, timeLeft, running, session, log, showSettings, editSettings,
+  setRunning, setEditSettings, setShowSettings, setLog, switchMode, reset, saveSettings, MODES }) {
 
   const totalToday = log.filter(e => e.date === new Date().toISOString().slice(0,10)).length;
   const totalAll = log.length;
@@ -2355,6 +3154,1177 @@ function PomodoroView() {
           ))}
         </GlassCard>
       )}
+    </div>
+  );
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTENT PLAN VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+const CHANNELS = [
+  { id: "yt",  label: "YouTube",   icon: "🎬", color: "#ef4444" },
+  { id: "tt",  label: "TikTok",    icon: "📱", color: "#ec4899" },
+  { id: "vk",  label: "VK",        icon: "💙", color: "#3b82f6" },
+  { id: "tg",  label: "Telegram",  icon: "✈️", color: "#06b6d4" },
+  { id: "inst",label: "Instagram", icon: "📸", color: "#a78bfa" },
+  { id: "other",label:"Другое",    icon: "🌐", color: "#94a3b8" },
+];
+const STATUSES = [
+  { id: "idea",       label: "Идея",         color: "#64748b", bg: "rgba(100,116,139,0.15)" },
+  { id: "script",     label: "Сценарий",     color: "#f59e0b", bg: "rgba(245,158,11,0.15)"  },
+  { id: "filming",    label: "Съёмка",       color: "#3b82f6", bg: "rgba(59,130,246,0.15)"  },
+  { id: "editing",    label: "Монтаж",       color: "#a78bfa", bg: "rgba(167,139,250,0.15)" },
+  { id: "ready",      label: "Готово",       color: "#10b981", bg: "rgba(16,185,129,0.15)"  },
+  { id: "published",  label: "Опубликовано", color: "#818cf8", bg: "rgba(129,140,248,0.15)" },
+];
+
+function ContentPlanView() {
+  const _uid = useUserId();
+  const [videos, setVideos] = useState(() => storageGet(userKey(_uid, "content-videos")) || []);
+  const [filterCh, setFilterCh]   = useState("all");
+  const [filterSt, setFilterSt]   = useState("all");
+  const [showForm, setShowForm]   = useState(false);
+  const [editId,   setEditId]     = useState(null);
+  const [search,   setSearch]     = useState("");
+
+  const emptyForm = { title:"", channel:"yt", status:"idea", deadline:"", tags:"", notes:"", priority:"normal" };
+  const [form, setForm] = useState(emptyForm);
+
+  const save = (vids) => { setVideos(vids); storageSet(userKey(_uid, "content-videos"), vids); };
+
+  const openNew = () => { setForm(emptyForm); setEditId(null); setShowForm(true); };
+  const openEdit = (v) => { setForm({ title:v.title, channel:v.channel, status:v.status, deadline:v.deadline||"", tags:v.tags||"", notes:v.notes||"", priority:v.priority||"normal" }); setEditId(v.id); setShowForm(true); };
+
+  const submit = () => {
+    if (!form.title.trim()) return;
+    if (editId) {
+      save(videos.map(v => v.id === editId ? { ...v, ...form, title: form.title.trim() } : v));
+    } else {
+      save([{ id: Date.now(), createdAt: Date.now(), ...form, title: form.title.trim() }, ...videos]);
+    }
+    setShowForm(false);
+    setEditId(null);
+  };
+
+  const remove = (id) => save(videos.filter(v => v.id !== id));
+  const setStatus = (id, status) => save(videos.map(v => v.id === id ? { ...v, status } : v));
+
+  const filtered = videos.filter(v => {
+    if (filterCh !== "all" && v.channel !== filterCh) return false;
+    if (filterSt !== "all" && v.status  !== filterSt) return false;
+    if (search && !v.title.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const stats = STATUSES.map(s => ({ ...s, count: videos.filter(v => v.status === s.id).length }));
+  const inp = { padding:"9px 13px", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, background:"rgba(255,255,255,0.05)", color:"#e2e8f0", fontSize:13, outline:"none", width:"100%", transition:"border-color .15s" };
+
+  const chOf  = (id) => CHANNELS.find(c => c.id === id) || CHANNELS[5];
+  const stOf  = (id) => STATUSES.find(s => s.id === id) || STATUSES[0];
+  const prioColor = { low:"#64748b", normal:"#f59e0b", high:"#ef4444" };
+  const prioLabel = { low:"Низкий", normal:"Средний", high:"Высокий" };
+
+  return (
+    <div>
+      {/* Header */}
+      <GlassCard style={{padding:"18px 22px",marginBottom:20}} glow="#ec4899">
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:16}}>
+            <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#ec4899,#f97316)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0,boxShadow:"0 6px 24px rgba(236,72,153,0.5)"}}>🎥</div>
+            <div>
+              <div style={{fontWeight:800,fontSize:18,color:"#e2e8f0",letterSpacing:"-0.5px"}}>Контент-план</div>
+              <div style={{fontSize:12,color:"#64748b",marginTop:3}}>Все ролики · <span style={{color:"#94a3b8"}}>{videos.length} идей</span></div>
+            </div>
+          </div>
+          <button onClick={openNew} style={{padding:"10px 20px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#ec4899,#f97316)",color:"white",fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:"0 4px 16px rgba(236,72,153,0.4)",transition:"all .2s",whiteSpace:"nowrap"}}>
+            + Новый ролик
+          </button>
+        </div>
+      </GlassCard>
+
+      {/* Status pipeline */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:20}}>
+        {stats.map(s => (
+          <GlassCard key={s.id} style={{padding:"12px 14px",cursor:"pointer",border:`1px solid ${filterSt===s.id ? s.color+"66" : "rgba(255,255,255,0.06)"}`,transition:"all .2s"}}
+            onClick={() => setFilterSt(filterSt === s.id ? "all" : s.id)}>
+            <div style={{fontSize:18,fontWeight:800,color:s.color,fontFamily:"'JetBrains Mono',monospace"}}>{s.count}</div>
+            <div style={{fontSize:10,color:"#64748b",marginTop:3,fontWeight:600}}>{s.label}</div>
+          </GlassCard>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <GlassCard style={{padding:"12px 16px",marginBottom:16}}>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Поиск…"
+            style={{...inp,width:180,flex:"0 0 auto"}}
+            onFocus={e=>e.target.style.borderColor="rgba(236,72,153,0.5)"} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"} />
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {[{id:"all",label:"Все каналы",icon:"📋"},...CHANNELS].map(c => (
+              <button key={c.id} onClick={()=>setFilterCh(c.id)} style={{padding:"6px 11px",borderRadius:8,border:`1px solid ${filterCh===c.id?(c.color||"#ec4899")+"66":"rgba(255,255,255,0.08)"}`,background:filterCh===c.id?`${c.color||"#ec4899"}22`:"transparent",color:filterCh===c.id?(c.color||"#ec4899"):"#64748b",fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
+                {c.icon} {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* Video cards */}
+      {filtered.length === 0 ? (
+        <GlassCard style={{padding:"60px 20px",textAlign:"center"}}>
+          <div style={{fontSize:48,marginBottom:14,opacity:0.4}}>🎥</div>
+          <div style={{color:"#334155",fontSize:14,fontWeight:600}}>Нет роликов</div>
+          <div style={{color:"#1e293b",fontSize:12,marginTop:6}}>{videos.length === 0 ? "Нажми «+ Новый ролик» чтобы начать" : "Попробуй другой фильтр"}</div>
+        </GlassCard>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {filtered.map(v => {
+            const ch = chOf(v.channel);
+            const st = stOf(v.status);
+            const tags = v.tags ? v.tags.split(",").map(t=>t.trim()).filter(Boolean) : [];
+            const isOverdue = v.deadline && new Date(v.deadline) < new Date() && v.status !== "published";
+            return (
+              <GlassCard key={v.id} style={{padding:"14px 18px",transition:"all .2s"}} glow={ch.color}>
+                <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+                  {/* Channel icon */}
+                  <div style={{width:40,height:40,borderRadius:11,background:`${ch.color}22`,border:`1px solid ${ch.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                    {ch.icon}
+                  </div>
+                  {/* Content */}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                      <span style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>{v.title}</span>
+                      {v.priority && v.priority !== "normal" && (
+                        <span style={{fontSize:10,fontWeight:700,color:prioColor[v.priority],background:`${prioColor[v.priority]}18`,padding:"2px 7px",borderRadius:6}}>
+                          {v.priority === "high" ? "🔥" : "⬇️"} {prioLabel[v.priority]}
+                        </span>
+                      )}
+                      {isOverdue && <span style={{fontSize:10,fontWeight:700,color:"#ef4444",background:"rgba(239,68,68,0.12)",padding:"2px 7px",borderRadius:6}}>⚠️ Просрочено</span>}
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:v.notes?8:0}}>
+                      <span style={{fontSize:10,color:ch.color,fontWeight:600}}>{ch.icon} {ch.label}</span>
+                      <span style={{fontSize:10,color:"#334155"}}>·</span>
+                      {/* Status selector */}
+                      <select value={v.status} onChange={e=>setStatus(v.id,e.target.value)}
+                        style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,border:`1px solid ${st.color}44`,borderRadius:6,padding:"2px 6px",cursor:"pointer",outline:"none"}}>
+                        {STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                      </select>
+                      {v.deadline && (
+                        <span style={{fontSize:10,color:isOverdue?"#ef4444":"#64748b"}}>
+                          📅 {new Date(v.deadline).toLocaleDateString("ru-RU",{day:"numeric",month:"short"})}
+                        </span>
+                      )}
+                      {tags.map(t=>(
+                        <span key={t} style={{fontSize:10,color:"#818cf8",background:"rgba(129,140,248,0.1)",padding:"2px 7px",borderRadius:6,fontWeight:600}}>#{t}</span>
+                      ))}
+                    </div>
+                    {v.notes && <div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginTop:4}}>{v.notes}</div>}
+                  </div>
+                  {/* Actions */}
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>openEdit(v)} style={{width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.04)",color:"#64748b",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.color="#e2e8f0";e.currentTarget.style.borderColor="rgba(255,255,255,0.18)"}}
+                      onMouseLeave={e=>{e.currentTarget.style.color="#64748b";e.currentTarget.style.borderColor="rgba(255,255,255,0.08)"}}>✏️</button>
+                    <button onClick={()=>remove(v.id)} style={{width:30,height:30,borderRadius:8,border:"1px solid rgba(239,68,68,0.15)",background:"rgba(239,68,68,0.05)",color:"#64748b",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.color="#ef4444";e.currentTarget.style.background="rgba(239,68,68,0.15)"}}
+                      onMouseLeave={e=>{e.currentTarget.style.color="#64748b";e.currentTarget.style.background="rgba(239,68,68,0.05)"}}>✕</button>
+                  </div>
+                </div>
+              </GlassCard>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal form */}
+      {showForm && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+          onClick={e=>{if(e.target===e.currentTarget){setShowForm(false);setEditId(null);}}}>
+          <div style={{background:"rgba(8,14,28,0.98)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:28,width:"100%",maxWidth:520,boxShadow:"0 24px 80px rgba(0,0,0,0.8)",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{fontWeight:800,fontSize:17,color:"#e2e8f0",marginBottom:22}}>{editId ? "✏️ Редактировать ролик" : "🎥 Новый ролик"}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {/* Title */}
+              <div>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>НАЗВАНИЕ *</div>
+                <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+                  placeholder="Например: Как я похудел за 30 дней"
+                  style={inp} onFocus={e=>e.target.style.borderColor="rgba(236,72,153,0.5)"} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"} />
+              </div>
+              {/* Channel + Status */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>КАНАЛ</div>
+                  <select value={form.channel} onChange={e=>setForm(f=>({...f,channel:e.target.value}))}
+                    style={{...inp,cursor:"pointer"}}>
+                    {CHANNELS.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>СТАТУС</div>
+                  <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
+                    style={{...inp,cursor:"pointer"}}>
+                    {STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* Priority + Deadline */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>ПРИОРИТЕТ</div>
+                  <select value={form.priority} onChange={e=>setForm(f=>({...f,priority:e.target.value}))}
+                    style={{...inp,cursor:"pointer"}}>
+                    <option value="low">⬇️ Низкий</option>
+                    <option value="normal">➡️ Средний</option>
+                    <option value="high">🔥 Высокий</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>ДЕДЛАЙН</div>
+                  <input type="date" value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))}
+                    style={{...inp,colorScheme:"dark"}} />
+                </div>
+              </div>
+              {/* Tags */}
+              <div>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>ТЕГИ (через запятую)</div>
+                <input value={form.tags} onChange={e=>setForm(f=>({...f,tags:e.target.value}))}
+                  placeholder="влог, туториал, реклама"
+                  style={inp} onFocus={e=>e.target.style.borderColor="rgba(236,72,153,0.5)"} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"} />
+              </div>
+              {/* Notes */}
+              <div>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>ЗАМЕТКИ / ИДЕЯ</div>
+                <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}
+                  placeholder="Краткое описание, референсы, план сценария…"
+                  rows={3}
+                  style={{...inp,resize:"vertical",lineHeight:1.5}}
+                  onFocus={e=>e.target.style.borderColor="rgba(236,72,153,0.5)"} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.1)"} />
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:22}}>
+              <button onClick={submit} disabled={!form.title.trim()}
+                style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:form.title.trim()?"linear-gradient(135deg,#ec4899,#f97316)":"rgba(255,255,255,0.05)",color:form.title.trim()?"white":"#334155",fontWeight:700,fontSize:14,cursor:form.title.trim()?"pointer":"default",boxShadow:form.title.trim()?"0 4px 16px rgba(236,72,153,0.4)":"none",transition:"all .2s"}}>
+                {editId ? "Сохранить" : "Добавить ролик"}
+              </button>
+              <button onClick={()=>{setShowForm(false);setEditId(null);}}
+                style={{padding:"12px 20px",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"#64748b",fontWeight:600,fontSize:14,cursor:"pointer",transition:"all .15s"}}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IDEA BOARD VIEW — Infinite canvas with drawing, text, images + AI analysis
+// ═══════════════════════════════════════════════════════════════════════════════
+function IdeaBoardView() {
+  const _uid = useUserId();
+  // ─── State ────────────────────────────────────────────────────────────────────
+  const [tool, setTool] = useState("pan"); // pan | draw | text | erase
+  const [color, setColor] = useState("#818cf8");
+  const [brushSize, setBrushSize] = useState(3);
+
+  // Elements + undo history
+  const [elements, setElements] = useState(() => {
+    try { const v = localStorage.getItem(userKey(_uid, "board-elements")); return v ? JSON.parse(v) : []; } catch { return []; }
+  });
+  const historyRef = useRef([]); // stack of past element snapshots
+  const MAX_HISTORY = 50;
+
+  // Viewport
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
+  const scaleRef = useRef(1);
+  const offsetRef = useRef({ x: 0, y: 0 });
+
+  // Interaction
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const currentPathRef = useRef(null);
+  const [currentPathState, setCurrentPathState] = useState(null); // for canvas redraw only
+  const [selectedEl, setSelectedEl] = useState(null);
+  const draggingElRef = useRef(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+
+  // Text
+  const [editingText, setEditingText] = useState(null);
+  const textInputRef = useRef(null);
+
+  // AI Chat
+  const [aiMessages, setAiMessages] = useState([]); // {role, content}
+  const [aiInput, setAiInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const aiEndRef = useRef(null);
+
+  // UI
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [colorPickerPos, setColorPickerPos] = useState({ top: 0, left: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const colorBtnRef = useRef(null);
+
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const elementsRef = useRef(elements);
+  const resizingElRef = useRef(null); // { id, startWorld, startW, startH }
+
+  const BOARD_COLORS = ["#818cf8","#f59e0b","#ef4444","#10b981","#3b82f6","#a78bfa","#ec4899","#14b8a6","#f97316","#ffffff","#e2e8f0","#94a3b8"];
+
+  // ─── Keep refs in sync ────────────────────────────────────────────────────────
+  useEffect(() => { scaleRef.current = scale; }, [scale]);
+  useEffect(() => { offsetRef.current = offset; }, [offset]);
+  useEffect(() => { elementsRef.current = elements; }, [elements]);
+
+  // ─── Persist + push history ───────────────────────────────────────────────────
+  const saveElements = useCallback((els, pushHistory = true) => {
+    if (pushHistory) {
+      historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), elementsRef.current];
+    }
+    setElements(els);
+    elementsRef.current = els;
+    try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(els)); } catch {}
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    const prev = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    setElements(prev);
+    elementsRef.current = prev;
+    try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(prev)); } catch {}
+  }, []);
+
+  // Ctrl+Z global + Escape fullscreen
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if (e.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo]);
+
+  // ─── Canvas draw ──────────────────────────────────────────────────────────────
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(offsetRef.current.x, offsetRef.current.y);
+    ctx.scale(scaleRef.current, scaleRef.current);
+
+    const drawPath = (el) => {
+      if (!el.points || el.points.length < 1) return;
+      ctx.beginPath();
+      ctx.strokeStyle = el.color;
+      ctx.lineWidth = el.size;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.globalAlpha = 0.92;
+      if (el.points.length === 1) {
+        ctx.arc(el.points[0].x, el.points[0].y, el.size / 2, 0, Math.PI * 2);
+        ctx.fillStyle = el.color;
+        ctx.fill();
+      } else {
+        ctx.moveTo(el.points[0].x, el.points[0].y);
+        for (let i = 1; i < el.points.length; i++) ctx.lineTo(el.points[i].x, el.points[i].y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    elementsRef.current.forEach(el => { if (el.type === "path") drawPath(el); });
+    if (currentPathRef.current) drawPath(currentPathRef.current);
+    ctx.restore();
+  }, []);
+
+  useEffect(() => { redrawCanvas(); }, [elements, currentPathState, offset, scale, redrawCanvas]);
+
+  // ─── Canvas resize ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const update = () => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      redrawCanvas();
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [redrawCanvas]);
+
+  // ─── Wheel (non-passive) ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const factor = e.deltaY > 0 ? 0.92 : 1.08;
+      const s = scaleRef.current;
+      const o = offsetRef.current;
+      const newScale = Math.max(0.1, Math.min(5, s * factor));
+      const wx = (px - o.x) / s;
+      const wy = (py - o.y) / s;
+      const newOffset = { x: px - wx * newScale, y: py - wy * newScale };
+      scaleRef.current = newScale;
+      offsetRef.current = newOffset;
+      setScale(newScale);
+      setOffset(newOffset);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ─── Coord helpers ────────────────────────────────────────────────────────────
+  const getEvtPos = (e) => {
+    const rect = containerRef.current.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+  };
+  const toWorld = (cx, cy) => ({
+    x: (cx - offsetRef.current.x) / scaleRef.current,
+    y: (cy - offsetRef.current.y) / scaleRef.current,
+  });
+
+  // ─── Pointer handlers ─────────────────────────────────────────────────────────
+  const handlePointerDown = (e) => {
+    if (e.button === 1 || e.button === 2) return;
+    const pos = getEvtPos(e);
+    const world = toWorld(pos.x, pos.y);
+
+    if (tool === "pan") {
+      setIsPanning(true);
+      panStartRef.current = { x: pos.x - offsetRef.current.x, y: pos.y - offsetRef.current.y };
+    } else if (tool === "draw") {
+      setIsDrawing(true);
+      currentPathRef.current = { type: "path", id: Date.now(), points: [world], color, size: brushSize };
+      setCurrentPathState(currentPathRef.current);
+    } else if (tool === "erase") {
+      const r = 16 / scaleRef.current;
+      const next = elementsRef.current.filter(el => {
+        if (el.type !== "path") return true;
+        return !el.points.some(p => Math.hypot(p.x - world.x, p.y - world.y) < r);
+      });
+      saveElements(next);
+    }
+  };
+
+  const handlePointerMove = (e) => {
+    const pos = getEvtPos(e);
+    const world = toWorld(pos.x, pos.y);
+
+    if (isPanning && panStartRef.current) {
+      const newOff = { x: pos.x - panStartRef.current.x, y: pos.y - panStartRef.current.y };
+      offsetRef.current = newOff;
+      setOffset(newOff);
+    } else if (isDrawing && currentPathRef.current) {
+      currentPathRef.current = { ...currentPathRef.current, points: [...currentPathRef.current.points, world] };
+      setCurrentPathState({ ...currentPathRef.current });
+    } else if (draggingElRef.current) {
+      const d = dragOffsetRef.current;
+      const next = elementsRef.current.map(el =>
+        el.id === draggingElRef.current ? { ...el, x: world.x - d.x, y: world.y - d.y } : el
+      );
+      // live update without pushing history (history pushed on mouseup)
+      setElements(next);
+      elementsRef.current = next;
+    } else if (resizingElRef.current) {
+      const r = resizingElRef.current;
+      const dx = world.x - r.startWorld.x;
+      if (r.aspectRatio) {
+        // Image: maintain aspect ratio
+        const newW = Math.max(40, r.startW + dx);
+        const newH = newW / r.aspectRatio;
+        const next = elementsRef.current.map(el =>
+          el.id === r.id ? { ...el, w: newW, h: newH } : el
+        );
+        setElements(next);
+        elementsRef.current = next;
+      } else {
+        // Text box: free resize
+        const newW = Math.max(60, r.startW + dx);
+        const dy = world.y - r.startWorld.y;
+        const newH = r.startH !== null ? Math.max(36, r.startH + dy) : null;
+        const next = elementsRef.current.map(el =>
+          el.id === r.id ? { ...el, width: newW, ...(newH !== null ? { height: newH } : {}) } : el
+        );
+        setElements(next);
+        elementsRef.current = next;
+      }
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (isPanning) setIsPanning(false);
+    if (isDrawing && currentPathRef.current && currentPathRef.current.points.length > 0) {
+      saveElements([...elementsRef.current, currentPathRef.current]);
+      currentPathRef.current = null;
+      setCurrentPathState(null);
+    }
+    setIsDrawing(false);
+    if (draggingElRef.current) {
+      // push to history now that drag is done
+      try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(elementsRef.current)); } catch {}
+      draggingElRef.current = null;
+    }
+    if (resizingElRef.current) {
+      historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), historyRef.current[historyRef.current.length - 1] || elementsRef.current];
+      try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(elementsRef.current)); } catch {}
+      resizingElRef.current = null;
+    }
+  };
+
+  // ─── Text ─────────────────────────────────────────────────────────────────────
+  const handleCanvasClick = (e) => {
+    if (tool !== "text") return;
+    const pos = getEvtPos(e);
+    const world = toWorld(pos.x, pos.y);
+    const id = Date.now();
+    const newEl = { type: "text", id, x: world.x, y: world.y, text: "", color, fontSize: 15 };
+    historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), elementsRef.current];
+    const next = [...elementsRef.current, newEl];
+    setElements(next);
+    elementsRef.current = next;
+    setEditingText(id);
+    setTimeout(() => textInputRef.current?.focus(), 30);
+  };
+
+  const commitText = (id) => {
+    setEditingText(null);
+    const el = elementsRef.current.find(x => x.id === id);
+    if (el && !el.text.trim()) {
+      // undo the addition
+      historyRef.current = historyRef.current.slice(0, -1);
+      const next = elementsRef.current.filter(x => x.id !== id);
+      setElements(next);
+      elementsRef.current = next;
+      try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(next)); } catch {}
+    } else {
+      try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(elementsRef.current)); } catch {}
+    }
+    setTool("pan");
+  };
+
+  // ─── Image upload ─────────────────────────────────────────────────────────────
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const s = scaleRef.current;
+        const o = offsetRef.current;
+        const cont = containerRef.current;
+        const maxW = Math.min(img.width, 400) / s;
+        const ratio = maxW / img.width;
+        const w = img.width * ratio;
+        const h = img.height * ratio;
+        const cx = (cont.clientWidth / 2 - o.x) / s;
+        const cy = (cont.clientHeight / 2 - o.y) / s;
+        saveElements([...elementsRef.current, { type: "image", id: Date.now(), x: cx - w / 2, y: cy - h / 2, w, h, src: ev.target.result }]);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+    setTool("pan");
+  };
+
+  // ─── Element drag ─────────────────────────────────────────────────────────────
+  const startDragEl = (e, elId) => {
+    if (tool !== "pan") return;
+    e.stopPropagation();
+    const pos = getEvtPos(e);
+    const world = toWorld(pos.x, pos.y);
+    const el = elementsRef.current.find(x => x.id === elId);
+    if (!el) return;
+    // push snapshot for undo before dragging
+    historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), elementsRef.current];
+    draggingElRef.current = elId;
+    dragOffsetRef.current = { x: world.x - el.x, y: world.y - el.y };
+    setSelectedEl(elId);
+  };
+
+  const deleteEl = (id) => {
+    saveElements(elementsRef.current.filter(el => el.id !== id));
+    setSelectedEl(null);
+  };
+
+  // ─── AI Chat ──────────────────────────────────────────────────────────────────
+  const getBoardContext = () => {
+    const els = elementsRef.current;
+    const texts = els.filter(e => e.type === "text" && e.text.trim()).map(e => `"${e.text.trim()}"`);
+    const paths = els.filter(e => e.type === "path").length;
+    const imgs = els.filter(e => e.type === "image").length;
+
+    const parts = [];
+    if (texts.length > 0) parts.push(`Текстовые заметки на доске (${texts.length} шт.): ${texts.join(", ")}`);
+    else parts.push("Текстовых заметок на доске нет");
+    if (paths > 0) parts.push(`Нарисованных линий/фигур: ${paths}`);
+    if (imgs > 0) parts.push(`Загруженных изображений: ${imgs}`);
+
+    return parts.join(". ");
+  };
+
+  const sendAiMessage = async (text) => {
+  if (!text.trim() || aiLoading) return;
+
+  const newMessages = [...aiMessages, { role: "user", content: text.trim() }];
+  setAiMessages(newMessages);
+  setAiInput("");
+  setAiLoading(true);
+
+  const boardCtx = getBoardContext();
+
+  const systemPrompt = `Ты — креативный аналитик идей и помощник по доске идей. Отвечай ТОЛЬКО на русском языке, живо и по делу.
+
+ТЕКУЩЕЕ СОСТОЯНИЕ ДОСКИ:
+${boardCtx}
+
+Твоя задача: анализировать идеи с доски, находить связи, предлагать следующие шаги, развивать концепции. Если на доске есть заметки — работай с ними конкретно. Если доска пуста — предложи с чего начать.
+
+Форматируй ответ с **жирным** для ключевых мыслей. Будь конкретным и полезным.`;
+
+  try {
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
+      body: JSON.stringify({
+        model: "mistral-small-latest",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...aiMessages.map(m => ({ role: m.role, content: m.content })),
+          { role: "user", content: text.trim() },
+        ],
+      }),
+    });
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || "Не удалось получить ответ.";
+    setAiMessages(prev => [...prev, { role: "assistant", content: reply }]);
+  } catch {
+    setAiMessages(prev => [...prev, { role: "assistant", content: "⚠️ Ошибка соединения. Попробуй ещё раз." }]);
+  } finally {
+    setAiLoading(false);
+  }
+};
+
+  const startAnalysis = () => {
+    setShowAiPanel(true);
+    sendAiMessage("Проанализируй мою доску идей и дай развёрнутый разбор: ключевые темы, связи между идеями, что интересного видишь, и 3 конкретных следующих шага.");
+  };
+
+  useEffect(() => {
+    if (showAiPanel) aiEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [aiMessages, showAiPanel]);
+
+  // ─── Format AI markdown ───────────────────────────────────────────────────────
+  const formatMsg = (text) => text.split("\n").map((line, i) => {
+    const html = line.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>").replace(/\*(.*?)\*/g, "<i>$1</i>");
+    return <div key={i} style={{ marginBottom: line.trim() ? 4 : 8 }} dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }} />;
+  });
+
+  // ─── Cursor ───────────────────────────────────────────────────────────────────
+  const cursorStyle = { pan: isPanning ? "grabbing" : "grab", draw: "crosshair", text: "crosshair", erase: "cell" }[tool] || "default";
+
+  // ─── Overlay elements (text + images) use CSS transform container ─────────────
+  const renderOverlay = () => (
+    <div style={{
+      position: "absolute", left: 0, top: 0,
+      transformOrigin: "0 0",
+      transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+      pointerEvents: "none",
+    }}>
+      {elements.filter(el => el.type === "text" || el.type === "image").map(el => {
+        const isSelected = selectedEl === el.id;
+        const isEditing = editingText === el.id;
+
+        if (el.type === "text") return (
+          <div key={el.id} style={{
+            position: "absolute", left: el.x, top: el.y,
+            pointerEvents: "all",
+            cursor: tool === "pan" ? (draggingElRef.current === el.id ? "grabbing" : "grab") : "default",
+            zIndex: isSelected ? 20 : 10,
+            userSelect: "none",
+          }}
+            onMouseDown={ev => startDragEl(ev, el.id)}
+            onTouchStart={ev => startDragEl(ev, el.id)}
+            onClick={ev => { if (tool === "pan") { ev.stopPropagation(); setSelectedEl(el.id); } }}
+          >
+            {isEditing ? (
+              <textarea ref={textInputRef}
+                value={el.text}
+                onChange={ev => {
+                  const next = elementsRef.current.map(x => x.id === el.id ? { ...x, text: ev.target.value } : x);
+                  setElements(next); elementsRef.current = next;
+                }}
+                onBlur={() => commitText(el.id)}
+                onKeyDown={ev => { if (ev.key === "Escape") commitText(el.id); ev.stopPropagation(); }}
+                style={{
+                  background: "rgba(8,12,24,0.94)", border: `2px solid ${el.color}`,
+                  borderRadius: 10, color: el.color, fontSize: el.fontSize,
+                  padding: "8px 12px",
+                  width: el.width ? el.width : undefined,
+                  height: el.height ? el.height : undefined,
+                  minWidth: 140, minHeight: 60, outline: "none",
+                  resize: "none", fontFamily: "'Inter',system-ui,sans-serif", fontWeight: 600,
+                  boxShadow: `0 0 24px ${el.color}44`, backdropFilter: "blur(12px)",
+                  lineHeight: 1.5,
+                }} autoFocus />
+            ) : (
+              <div
+                style={{
+                  background: "rgba(8,12,24,0.88)", border: `2px solid ${isSelected ? el.color : el.color + "55"}`,
+                  borderRadius: 10, color: el.color, fontSize: el.fontSize,
+                  padding: "8px 12px",
+                  width: el.width ? el.width : undefined,
+                  height: el.height ? el.height : undefined,
+                  minWidth: 60, maxWidth: el.width ? undefined : 320,
+                  fontFamily: "'Inter',system-ui,sans-serif", fontWeight: 600,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  boxShadow: isSelected ? `0 0 24px ${el.color}66` : "0 4px 20px rgba(0,0,0,0.5)",
+                  backdropFilter: "blur(12px)", transition: "border-color .15s, box-shadow .15s",
+                  lineHeight: 1.5, overflow: el.height ? "auto" : undefined,
+                }}
+                onDoubleClick={ev => { ev.stopPropagation(); historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), elementsRef.current]; setEditingText(el.id); }}
+              >
+                {el.text || <span style={{ opacity: 0.3, fontStyle: "italic", fontSize: "0.9em" }}>двойной клик</span>}
+              </div>
+            )}
+            {isSelected && !isEditing && tool === "pan" && (
+              <>
+                {/* Delete button */}
+                <button onClick={ev => { ev.stopPropagation(); deleteEl(el.id); }}
+                  style={{
+                    position: "absolute", top: -9, right: -9, width: 20, height: 20,
+                    borderRadius: "50%", background: "#ef4444", border: "2px solid rgba(0,0,0,0.3)",
+                    color: "white", fontSize: 10, cursor: "pointer", fontWeight: 900,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(239,68,68,0.6)", lineHeight: 1,
+                  }}>✕</button>
+
+                {/* Font size controls */}
+                <div
+                  onMouseDown={ev => ev.stopPropagation()}
+                  style={{
+                    position: "absolute", top: -34, left: 0,
+                    display: "flex", alignItems: "center", gap: 4,
+                    background: "rgba(8,12,24,0.95)", border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 8, padding: "3px 6px", backdropFilter: "blur(16px)",
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+                  }}>
+                  <button
+                    onClick={ev => { ev.stopPropagation(); const next = elementsRef.current.map(x => x.id === el.id ? { ...x, fontSize: Math.max(8, (x.fontSize||15) - 2) } : x); setElements(next); elementsRef.current = next; try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(next)); } catch {} }}
+                    style={{ width: 20, height: 20, borderRadius: 5, border: "none", background: "rgba(255,255,255,0.07)", color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>−</button>
+                  <span style={{ fontSize: 11, color: "#818cf8", fontWeight: 700, minWidth: 22, textAlign: "center", fontFamily: "'JetBrains Mono',monospace" }}>{el.fontSize||15}</span>
+                  <button
+                    onClick={ev => { ev.stopPropagation(); const next = elementsRef.current.map(x => x.id === el.id ? { ...x, fontSize: Math.min(96, (x.fontSize||15) + 2) } : x); setElements(next); elementsRef.current = next; try { localStorage.setItem(userKey(_uid, "board-elements"), JSON.stringify(next)); } catch {} }}
+                    style={{ width: 20, height: 20, borderRadius: 5, border: "none", background: "rgba(255,255,255,0.07)", color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</button>
+                  <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.1)", margin: "0 2px" }} />
+                  <span style={{ fontSize: 9, color: "#475569" }}>px</span>
+                </div>
+
+                {/* Resize handle — bottom-right corner */}
+                <div
+                  onMouseDown={ev => {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    const pos = getEvtPos(ev);
+                    const world = toWorld(pos.x, pos.y);
+                    const curEl = elementsRef.current.find(x => x.id === el.id);
+                    historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), elementsRef.current];
+                    resizingElRef.current = {
+                      id: el.id,
+                      startWorld: world,
+                      startW: curEl.width || (ev.currentTarget.parentElement.querySelector("div")?.offsetWidth || 120),
+                      startH: curEl.height || null,
+                    };
+                  }}
+                  style={{
+                    position: "absolute", bottom: -7, right: -7,
+                    width: 14, height: 14, borderRadius: 4,
+                    background: el.color, border: "2px solid rgba(0,0,0,0.4)",
+                    cursor: "nwse-resize", zIndex: 30,
+                    boxShadow: `0 0 8px ${el.color}88`,
+                  }}
+                />
+              </>
+            )}
+          </div>
+        );
+
+        if (el.type === "image") return (
+          <div key={el.id} style={{
+            position: "absolute", left: el.x, top: el.y, width: el.w, height: el.h,
+            pointerEvents: "all",
+            cursor: tool === "pan" ? (draggingElRef.current === el.id ? "grabbing" : "grab") : "default",
+            zIndex: isSelected ? 20 : 10,
+            border: `2px solid ${isSelected ? "#818cf8" : "transparent"}`,
+            borderRadius: 12, overflow: "visible",
+            boxShadow: isSelected ? "0 0 24px rgba(129,140,248,0.6)" : "0 8px 32px rgba(0,0,0,0.5)",
+            transition: "border-color .15s, box-shadow .15s",
+          }}
+            onMouseDown={ev => startDragEl(ev, el.id)}
+            onTouchStart={ev => startDragEl(ev, el.id)}
+            onClick={ev => { if (tool === "pan") { ev.stopPropagation(); setSelectedEl(el.id); } }}
+          >
+            <div style={{ width: "100%", height: "100%", borderRadius: 10, overflow: "hidden" }}>
+              <img src={el.src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }} draggable={false} />
+            </div>
+            {isSelected && tool === "pan" && (
+              <>
+                <button onClick={ev => { ev.stopPropagation(); deleteEl(el.id); }}
+                  style={{
+                    position: "absolute", top: 5, right: 5, width: 22, height: 22,
+                    borderRadius: "50%", background: "#ef4444", border: "2px solid rgba(0,0,0,0.3)",
+                    color: "white", fontSize: 11, cursor: "pointer", fontWeight: 900,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(239,68,68,0.6)",
+                  }}>✕</button>
+                {/* Resize handle — bottom-right corner */}
+                <div
+                  onMouseDown={ev => {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    const pos = getEvtPos(ev);
+                    const world = toWorld(pos.x, pos.y);
+                    historyRef.current = [...historyRef.current.slice(-MAX_HISTORY), elementsRef.current];
+                    resizingElRef.current = {
+                      id: el.id,
+                      startWorld: world,
+                      startW: el.w,
+                      startH: el.h,
+                      aspectRatio: el.w / el.h,
+                    };
+                  }}
+                  style={{
+                    position: "absolute", bottom: -7, right: -7,
+                    width: 14, height: 14, borderRadius: 4,
+                    background: "#818cf8", border: "2px solid rgba(0,0,0,0.4)",
+                    cursor: "nwse-resize", zIndex: 30,
+                    boxShadow: "0 0 8px rgba(129,140,248,0.8)",
+                  }}
+                />
+              </>
+            )}
+          </div>
+        );
+        return null;
+      })}
+    </div>
+  );
+
+  // ─── JSX ──────────────────────────────────────────────────────────────────────
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: 0,
+      ...(isFullscreen
+        ? { position: "fixed", inset: 0, zIndex: 9999, background: "#060b18", padding: 10 }
+        : { height: "calc(100vh - 80px)" }
+      )
+    }}>
+      {/* Header toolbar */}
+      <GlassCard style={{ padding: "10px 14px", marginBottom: 10, flexShrink: 0 }} glow="#818cf8">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 4 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#818cf8,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, boxShadow: "0 4px 14px rgba(129,140,248,0.5)", flexShrink: 0 }}>💡</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#e2e8f0" }}>Доска идей</div>
+              <div style={{ fontSize: 10, color: "#475569" }}>{elements.length} эл. · {Math.round(scale * 100)}%</div>
+            </div>
+          </div>
+
+          {/* Tool group */}
+          <div style={{ display: "flex", gap: 3, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 11, padding: "4px" }}>
+            {[
+              { id: "pan", icon: "✋", tip: "Перемещение (V)" },
+              { id: "draw", icon: "✏️", tip: "Рисование (D)" },
+              { id: "text", icon: "T", tip: "Текст (T)" },
+              { id: "erase", icon: "⌫", tip: "Ластик (E)" },
+            ].map(t => (
+              <button key={t.id} onClick={() => setTool(t.id)} title={t.tip}
+                style={{
+                  width: 34, height: 34, borderRadius: 8, border: "none", cursor: "pointer",
+                  background: tool === t.id ? "linear-gradient(135deg,#6366f1,#a78bfa)" : "transparent",
+                  color: tool === t.id ? "white" : "#475569",
+                  fontSize: t.id === "text" ? 13 : 16, fontWeight: 800,
+                  boxShadow: tool === t.id ? "0 2px 10px rgba(129,140,248,0.5)" : "none",
+                  transition: "all .18s",
+                }}>{t.icon}</button>
+            ))}
+          </div>
+
+          {/* Color picker */}
+          {(tool === "draw" || tool === "text") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ position: "relative" }}>
+                <button
+                  ref={colorBtnRef}
+                  onClick={() => {
+                    if (!showColorPicker && colorBtnRef.current) {
+                      const rect = colorBtnRef.current.getBoundingClientRect();
+                      setColorPickerPos({ top: rect.bottom + 6, left: rect.left });
+                    }
+                    setShowColorPicker(p => !p);
+                  }}
+                  style={{ width: 28, height: 28, borderRadius: "50%", border: `3px solid ${showColorPicker ? "white" : "rgba(255,255,255,0.2)"}`, background: color, cursor: "pointer", boxShadow: `0 0 14px ${color}88`, flexShrink: 0 }} />
+                {showColorPicker && createPortal(
+                  <>
+                    <div onClick={() => setShowColorPicker(false)} style={{ position: "fixed", inset: 0, zIndex: 99998 }} />
+                    <div style={{ position: "fixed", top: colorPickerPos.top, left: colorPickerPos.left, zIndex: 99999, background: "rgba(8,12,24,0.97)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: 10, display: "flex", flexWrap: "wrap", gap: 5, width: 160, backdropFilter: "blur(20px)", boxShadow: "0 10px 40px rgba(0,0,0,0.7)" }}>
+                      {BOARD_COLORS.map(c => (
+                        <div key={c} onClick={() => { setColor(c); setShowColorPicker(false); }}
+                          style={{ width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer", border: color === c ? "3px solid white" : "2px solid transparent", transform: color === c ? "scale(1.22)" : "scale(1)", transition: "all .14s", boxShadow: color === c ? `0 0 8px ${c}` : "none" }} />
+                      ))}
+                    </div>
+                  </>,
+                  document.body
+                )}
+              </div>
+              {tool === "draw" && (
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  {[2, 4, 8, 14].map(s => (
+                    <div key={s} onClick={() => setBrushSize(s)}
+                      style={{ width: s * 2 + 2, height: s * 2 + 2, minWidth: 14, minHeight: 14, borderRadius: "50%", background: brushSize === s ? color : "#1e293b", cursor: "pointer", border: brushSize === s ? `2px solid ${color}` : "2px solid #334155", transition: "all .14s", boxShadow: brushSize === s ? `0 0 8px ${color}` : "none" }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Undo button */}
+          <button onClick={undo} title="Отменить (Ctrl+Z)"
+            style={{ padding: "7px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#64748b", cursor: "pointer", fontSize: 13, fontWeight: 700, transition: "all .18s", display: "flex", alignItems: "center", gap: 5 }}
+            onMouseEnter={e => { e.currentTarget.style.color = "#a78bfa"; e.currentTarget.style.borderColor = "rgba(167,139,250,0.35)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "#64748b"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}>
+            ↩ Отмена
+          </button>
+
+          {/* Image upload */}
+          <button onClick={() => fileInputRef.current?.click()}
+            style={{ padding: "7px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all .18s" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(129,140,248,0.4)"}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
+            🖼️ Фото
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: "none" }} />
+
+          {/* Reset view */}
+          <button onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); scaleRef.current = 1; offsetRef.current = { x: 0, y: 0 }; }}
+            style={{ padding: "7px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#64748b", cursor: "pointer", fontSize: 12, transition: "all .18s" }}>
+            ⊙ Сброс вида
+          </button>
+
+          {/* Clear all */}
+          <button onClick={() => { if (window.confirm("Очистить доску?")) { saveElements([]); setSelectedEl(null); } }}
+            style={{ padding: "7px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.06)", background: "transparent", color: "#334155", cursor: "pointer", fontSize: 12, transition: "all .18s", marginLeft: 2 }}
+            onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "#334155"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}>
+            🗑️ Очистить
+          </button>
+
+          {/* AI Chat button */}
+          <button onClick={() => { setShowAiPanel(p => !p); }}
+            style={{
+              padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer", marginLeft: "auto",
+              background: showAiPanel ? "rgba(129,140,248,0.2)" : "linear-gradient(135deg,#6366f1,#a78bfa)",
+              color: showAiPanel ? "#818cf8" : "white", fontWeight: 700, fontSize: 13,
+              border: showAiPanel ? "1px solid rgba(129,140,248,0.4)" : "none",
+              boxShadow: showAiPanel ? "none" : "0 4px 14px rgba(129,140,248,0.5)",
+              transition: "all .2s", display: "flex", alignItems: "center", gap: 6,
+            }}>
+            🤖 {showAiPanel ? "Скрыть ИИ" : "ИИ-чат"}
+          </button>
+
+          {/* Analyze board shortcut */}
+          <button onClick={startAnalysis}
+            style={{ padding: "7px 14px", borderRadius: 9, border: "1px solid rgba(129,140,248,0.3)", background: "rgba(129,140,248,0.08)", color: "#818cf8", cursor: "pointer", fontSize: 12, fontWeight: 600, transition: "all .18s" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(129,140,248,0.16)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(129,140,248,0.08)"}>
+            ✦ Анализ доски
+          </button>
+
+          {/* Fullscreen button */}
+          <button onClick={() => setIsFullscreen(f => !f)} title={isFullscreen ? "Выйти из полного экрана (Esc)" : "Открыть на весь экран"}
+            style={{ padding: "7px 13px", borderRadius: 9, border: `1px solid ${isFullscreen ? "rgba(129,140,248,0.5)" : "rgba(255,255,255,0.08)"}`, background: isFullscreen ? "rgba(129,140,248,0.15)" : "rgba(255,255,255,0.04)", color: isFullscreen ? "#818cf8" : "#94a3b8", cursor: "pointer", fontSize: 15, transition: "all .18s", lineHeight: 1 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(129,140,248,0.4)"; e.currentTarget.style.color = "#818cf8"; }}
+            onMouseLeave={e => { if (!isFullscreen) { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#94a3b8"; } }}>
+            {isFullscreen ? "⛶" : "⛶"}
+          </button>
+        </div>
+      </GlassCard>
+
+      {/* Board + AI row */}
+      <div style={{ flex: 1, display: "flex", gap: 10, minHeight: 0 }}>
+        {/* Canvas container */}
+        <div ref={containerRef}
+          style={{
+            flex: 1, position: "relative", borderRadius: 14,
+            background: "rgba(4,8,18,0.85)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            overflow: "hidden", cursor: cursorStyle,
+            backgroundImage: "radial-gradient(circle, rgba(129,140,248,0.035) 1px, transparent 1px)",
+            backgroundSize: `${28 * scale}px ${28 * scale}px`,
+            backgroundPosition: `${offset.x % (28 * scale)}px ${offset.y % (28 * scale)}px`,
+          }}
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={handlePointerUp}
+          onTouchStart={handlePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+          onClick={e => {
+            if (tool === "text") handleCanvasClick(e);
+            else if (tool === "pan") setSelectedEl(null);
+          }}
+        >
+          <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
+          {renderOverlay()}
+
+          {elements.length === 0 && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", gap: 10 }}>
+              <div style={{ fontSize: 44, opacity: 0.1 }}>💡</div>
+              <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 600, textAlign: "center", lineHeight: 1.6 }}>
+                Пустая доска<br />
+                <span style={{ fontSize: 11, fontWeight: 400, color: "#0f172a" }}>
+                  ✏️ рисуй · T текст · 🖼️ картинки · колёсико = зум
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Status bar */}
+          <div style={{ position: "absolute", bottom: 10, left: 10, right: 10, display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "none" }}>
+            <div style={{ background: "rgba(4,8,18,0.8)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 7, padding: "4px 10px", fontSize: 10, color: "#334155", backdropFilter: "blur(8px)" }}>
+              {tool === "pan" && "✋ Тяни · скролл = зум · клик на элемент · двойной клик = редактировать текст"}
+              {tool === "draw" && "✏️ Зажми и рисуй · Ctrl+Z = отмена"}
+              {tool === "text" && "T Кликни чтобы добавить заметку · Esc чтобы завершить"}
+              {tool === "erase" && "⌫ Нажми на линию чтобы удалить"}
+            </div>
+            <div style={{ background: "rgba(4,8,18,0.8)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 7, padding: "4px 10px", fontSize: 10, color: "#334155", backdropFilter: "blur(8px)", fontFamily: "'JetBrains Mono',monospace" }}>
+              {Math.round(scale * 100)}%
+            </div>
+          </div>
+        </div>
+
+        {/* AI Chat panel */}
+        {showAiPanel && (
+          <GlassCard style={{ width: 340, padding: 0, flexShrink: 0, overflow: "hidden", display: "flex", flexDirection: "column" }} glow="#818cf8">
+            {/* Panel header */}
+            <div style={{ padding: "12px 16px", background: "linear-gradient(135deg,rgba(99,102,241,0.18),rgba(167,139,250,0.08))", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg,#6366f1,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🤖</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#e2e8f0" }}>ИИ-помощник</div>
+                  <div style={{ fontSize: 10, color: "#475569" }}>знает контекст доски</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {aiMessages.length > 0 && (
+                  <button onClick={() => setAiMessages([])}
+                    style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 11, padding: "3px 7px", borderRadius: 6, transition: "color .15s" }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#94a3b8"} onMouseLeave={e => e.currentTarget.style.color = "#334155"}>
+                    очистить
+                  </button>
+                )}
+                <button onClick={() => setShowAiPanel(false)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "2px 4px" }}>✕</button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {aiMessages.length === 0 && !aiLoading && (
+                <div style={{ textAlign: "center", paddingTop: 30, display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ fontSize: 28, opacity: 0.3 }}>🤖</div>
+                  <div style={{ color: "#334155", fontSize: 12, lineHeight: 1.6 }}>
+                    Спроси что угодно о доске<br />или нажми «Анализ доски»
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {["Проанализируй мою доску", "Как связаны эти идеи?", "Предложи следующий шаг"].map(q => (
+                      <button key={q} onClick={() => sendAiMessage(q)}
+                        style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(129,140,248,0.2)", background: "rgba(129,140,248,0.06)", color: "#818cf8", cursor: "pointer", fontSize: 11, fontWeight: 600, transition: "all .15s", textAlign: "left" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(129,140,248,0.14)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "rgba(129,140,248,0.06)"}>
+                        {q} →
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiMessages.map((msg, i) => (
+                <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    maxWidth: "88%", padding: "9px 12px", borderRadius: msg.role === "user" ? "12px 12px 3px 12px" : "12px 12px 12px 3px",
+                    background: msg.role === "user" ? "linear-gradient(135deg,#4f46e5,#7c3aed)" : "rgba(255,255,255,0.05)",
+                    border: msg.role === "user" ? "none" : "1px solid rgba(255,255,255,0.07)",
+                    color: msg.role === "user" ? "white" : "#cbd5e1",
+                    fontSize: 12.5, lineHeight: 1.65,
+                    boxShadow: msg.role === "user" ? "0 2px 12px rgba(79,70,229,0.4)" : "none",
+                  }}>
+                    {msg.role === "assistant" ? formatMsg(msg.content) : msg.content}
+                  </div>
+                </div>
+              ))}
+
+              {aiLoading && (
+                <div style={{ display: "flex", alignItems: "flex-start" }}>
+                  <div style={{ padding: "10px 14px", borderRadius: "12px 12px 12px 3px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", gap: 5, alignItems: "center" }}>
+                    {[0, 1, 2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#818cf8", animation: `bounce .8s ${i * 0.14}s ease-in-out infinite` }} />)}
+                  </div>
+                </div>
+              )}
+              <div ref={aiEndRef} />
+            </div>
+
+            {/* Input */}
+            <div style={{ padding: "10px 12px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, display: "flex", gap: 7 }}>
+              <input
+                value={aiInput}
+                onChange={e => setAiInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAiMessage(aiInput); } }}
+                placeholder="Напиши сообщение…"
+                style={{
+                  flex: 1, padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.09)",
+                  background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 12.5, outline: "none",
+                  transition: "border-color .15s",
+                }}
+                onFocus={e => e.target.style.borderColor = "rgba(129,140,248,0.5)"}
+                onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.09)"}
+              />
+              <button onClick={() => sendAiMessage(aiInput)} disabled={aiLoading || !aiInput.trim()}
+                style={{
+                  width: 36, height: 36, borderRadius: 10, border: "none", cursor: aiLoading || !aiInput.trim() ? "default" : "pointer",
+                  background: aiInput.trim() ? "linear-gradient(135deg,#6366f1,#a78bfa)" : "rgba(255,255,255,0.05)",
+                  color: aiInput.trim() ? "white" : "#334155", fontSize: 16, flexShrink: 0,
+                  boxShadow: aiInput.trim() ? "0 2px 10px rgba(99,102,241,0.5)" : "none",
+                  transition: "all .18s", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>→</button>
+            </div>
+          </GlassCard>
+        )}
+      </div>
     </div>
   );
 }
